@@ -286,11 +286,58 @@ async def tool_handler({param_str}) -> str:
         prefixed_name = f"{server_name}__{prompt.name}"
         description = f"[{server_name}] {prompt.description or prompt.name}"
 
-        async def prompt_handler(**kwargs: Any) -> str:
-            return f"Prompt {prompt.name} from {server_name} with args: {kwargs}"
+        # Build parameter list from prompt arguments
+        param_types = []
+        for arg in prompt.arguments:
+            param_types.append((arg.name, str, arg.required))
+
+        # Sort parameters: required first, then optional
+        param_types.sort(key=lambda x: (not x[2], x[0]))
+
+        # Create a closure to handle the prompt call
+        def _create_prompt_handler():
+            async def handler(kwargs: dict) -> str:
+                return f"Prompt {prompt.name} from {server_name} with args: {kwargs}"
+            return handler
+
+        # If there are no parameters, create a simple handler
+        if not param_types:
+            async def prompt_handler() -> str:
+                return await _create_prompt_handler()({})
+
+            self.mcp.prompt(name=prefixed_name, description=description)(prompt_handler)
+            return
+
+        # Build the parameter string for the dynamic function
+        param_str_parts = []
+        for param_name, python_type, is_required in param_types:
+            type_name = python_type.__name__
+            if is_required:
+                param_str_parts.append(f"{param_name}: {type_name}")
+            else:
+                param_str_parts.append(f"{param_name}: {type_name} = None")
+
+        param_str = ", ".join(param_str_parts)
+
+        # Create the function body
+        func_code = f"""
+async def prompt_handler({param_str}) -> str:
+    # Collect all parameters
+    kwargs = {{{", ".join(f'"{p[0]}": {p[0]}' for p in param_types)}}}
+    # Remove None values
+    kwargs = {{k: v for k, v in kwargs.items() if v is not None}}
+    return await _call_handler(kwargs)
+"""
+
+        # Create a namespace with the handler
+        namespace = {"_call_handler": _create_prompt_handler()}
+
+        # Execute the function definition
+        exec(func_code, namespace)
+        prompt_handler_func = namespace["prompt_handler"]
 
         # Register with FastMCP
-        self.mcp.prompt(name=prefixed_name, description=description)(prompt_handler)
+        self.mcp.prompt(name=prefixed_name, description=description)(prompt_handler_func)
 
     async def start(self) -> None:
         """Start the proxy server with both HTTP (/mcp) and SSE (/sse) endpoints."""
@@ -426,4 +473,3 @@ async def tool_handler({param_str}) -> str:
         self._connected_clients.discard(client_id)
         if self.config.enable_logging:
             self.logger.log_client_disconnected(client_id=client_id, reason=reason)
-
