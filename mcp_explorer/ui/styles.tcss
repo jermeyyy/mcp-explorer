@@ -828,6 +828,11 @@ Tree {
     color: #d4d4d4;
 }
 
+Tree:disabled {
+    opacity: 0.5;
+    color: #858585;
+}
+
 Tree > .tree--cursor {
     background: #404040;
 }
@@ -847,3 +852,15 @@ Tree > .tree--guides-hover {
 Tree > .tree--guides-selected {
     color: #569cd6;
 }
+
+/* Tree item states for proxy config */
+.tree-item-enabled {
+    color: #89d185;
+    text-style: bold;
+}
+
+.tree-item-disabled {
+    color: #858585;
+    text-style: none;
+}
+

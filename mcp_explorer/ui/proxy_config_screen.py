@@ -19,7 +19,6 @@ class ProxyConfigScreen(Screen[None]):
     BINDINGS = [
         ("escape", "go_back", "Back"),
         ("q", "quit", "Quit"),
-        ("s", "save_config", "Save"),
     ]
 
     def __init__(self, servers: list[MCPServer], config: ProxyConfig) -> None:
@@ -66,8 +65,6 @@ class ProxyConfigScreen(Screen[None]):
                     else:
                         yield Button("▶ Start Proxy", id="toggle-proxy", variant="success")
 
-                    yield Button("💾 Save Configuration", id="save-config", variant="primary")
-
             # Server configurations as unified tree
             yield Label("Select Servers and Capabilities to Proxy", classes="section-title")
             with VerticalScroll(id="server-configs"):
@@ -78,6 +75,7 @@ class ProxyConfigScreen(Screen[None]):
                     tree: Tree[dict[str, Any]] = Tree("Servers", id="servers-tree")
                     tree.root.expand()
                     tree.show_root = False  # Hide root node
+                    tree.disabled = self.config.enabled  # Disable tree when proxy is running
 
                     for server in self.servers:
                         # Only show connected servers
@@ -86,6 +84,23 @@ class ProxyConfigScreen(Screen[None]):
 
                     yield tree
 
+    def _format_label(self, text: str, enabled: bool) -> str:
+        """Format a tree node label with Rich markup for visual distinction.
+
+        Args:
+            text: The text to format
+            enabled: Whether the item is enabled
+
+        Returns:
+            Formatted text with Rich markup
+        """
+        if enabled:
+            # Green and bold for enabled items
+            return f"[bold green]{text}[/bold green]"
+        else:
+            # Dim gray for disabled items
+            return f"[dim]{text}[/dim]"
+
     def _add_server_to_tree(self, parent: TreeNode[dict[str, Any]], server: MCPServer) -> None:
         """Add a server and its capabilities to the tree.
 
@@ -93,27 +108,29 @@ class ProxyConfigScreen(Screen[None]):
             parent: Parent tree node
             server: MCP server to add
         """
-        # Add server as first-level node
-        server_enabled = self.config.is_server_enabled(server.name)
-        server_checkbox = "☑" if server_enabled else "☐"
+        # Add server as first-level node (no checkbox, no color formatting)
         server_node = parent.add(
-            f"{server_checkbox} {server.name}",
+            server.name,
             data={"type": "server", "name": server.name},
             expand=True,
         )
 
         # Add tools
         if server.tools:
+            # Add category with enable/disable buttons
+            all_enabled = all(self.config.is_tool_enabled(server.name, t.name) for t in server.tools)
+            button_text = "[Disable all]" if all_enabled else "[Enable all]"
             tools_category = server_node.add(
-                f"Tools ({len(server.tools)})",
-                data={"type": "category", "category": "tools"},
-                expand=server_enabled,
+                f"Tools ({len(server.tools)}) {button_text}",
+                data={"type": "category", "category": "tools", "server": server.name},
+                expand=True,
             )
             for tool in server.tools:
                 tool_enabled = self.config.is_tool_enabled(server.name, tool.name)
                 tool_checkbox = "☑" if tool_enabled else "☐"
+                label = self._format_label(f"{tool_checkbox} {tool.name}", tool_enabled)
                 tools_category.add_leaf(
-                    f"{tool_checkbox} {tool.name}",
+                    label,
                     data={
                         "type": "tool",
                         "server": server.name,
@@ -123,16 +140,19 @@ class ProxyConfigScreen(Screen[None]):
 
         # Add resources
         if server.resources:
+            all_enabled = all(self.config.is_resource_enabled(server.name, r.uri) for r in server.resources)
+            button_text = "[✓ Disable All]" if all_enabled else "[✓ Enable All]"
             resources_category = server_node.add(
-                f"Resources ({len(server.resources)})",
-                data={"type": "category", "category": "resources"},
-                expand=server_enabled,
+                f"Resources ({len(server.resources)}) {button_text}",
+                data={"type": "category", "category": "resources", "server": server.name},
+                expand=True,
             )
             for resource in server.resources:
                 resource_enabled = self.config.is_resource_enabled(server.name, resource.uri)
                 resource_checkbox = "☑" if resource_enabled else "☐"
+                label = self._format_label(f"{resource_checkbox} {resource.get_display_name()}", resource_enabled)
                 resources_category.add_leaf(
-                    f"{resource_checkbox} {resource.get_display_name()}",
+                    label,
                     data={
                         "type": "resource",
                         "server": server.name,
@@ -142,16 +162,19 @@ class ProxyConfigScreen(Screen[None]):
 
         # Add prompts
         if server.prompts:
+            all_enabled = all(self.config.is_prompt_enabled(server.name, p.name) for p in server.prompts)
+            button_text = "[✓ Disable All]" if all_enabled else "[✓ Enable All]"
             prompts_category = server_node.add(
-                f"Prompts ({len(server.prompts)})",
-                data={"type": "category", "category": "prompts"},
-                expand=server_enabled,
+                f"Prompts ({len(server.prompts)}) {button_text}",
+                data={"type": "category", "category": "prompts", "server": server.name},
+                expand=True,
             )
             for prompt in server.prompts:
                 prompt_enabled = self.config.is_prompt_enabled(server.name, prompt.name)
                 prompt_checkbox = "☑" if prompt_enabled else "☐"
+                label = self._format_label(f"{prompt_checkbox} {prompt.name}", prompt_enabled)
                 prompts_category.add_leaf(
-                    f"{prompt_checkbox} {prompt.name}",
+                    label,
                     data={
                         "type": "prompt",
                         "server": server.name,
@@ -166,6 +189,7 @@ class ProxyConfigScreen(Screen[None]):
             port = int(event.value)
             if 1 <= port <= 65535:
                 self.config.port = port
+                self._auto_save_config()
         except ValueError:
             pass  # Invalid port number, ignore
 
@@ -207,33 +231,25 @@ class ProxyConfigScreen(Screen[None]):
         # Refresh to update UI
         self.refresh(recompose=True)
 
-    @on(Button.Pressed, "#save-config")
-    def action_save_config(self) -> None:
-        """Save the configuration."""
-        try:
-            self.config.save()
-            # Update app subtitle in case status changed
-            if hasattr(self.app, "update_subtitle"):
-                self.app.update_subtitle()
-            self.app.notify(
-                f"Configuration saved to {self.config.get_config_path()}", severity="information"
-            )
-        except Exception as e:
-            self.app.notify(f"Error saving configuration: {e}", severity="error")
-
     @on(Tree.NodeSelected)
     def handle_tree_node_selected(self, event: Tree.NodeSelected[dict[str, Any]]) -> None:
         """Handle tree node selection for toggling capabilities."""
+        # Prevent changes when proxy is running
+        if self.config.enabled:
+            self.notify("Stop the proxy server before making changes to the configuration", severity="warning")
+            return
+
         node = event.node
         if not node or not node.data:
             return
 
         node_type = node.data.get("type")
 
-        # Handle server node - toggle entire server and all children
-        if node_type == "server":
-            server_name = node.data.get("name")
-            if not isinstance(server_name, str):
+        # Handle category node - toggle all items in category
+        if node_type == "category":
+            category = node.data.get("category")
+            server_name = node.data.get("server")
+            if not isinstance(server_name, str) or not isinstance(category, str):
                 return
 
             # Get the server object
@@ -241,60 +257,64 @@ class ProxyConfigScreen(Screen[None]):
             if not server:
                 return
 
-            # Toggle server state
-            current_enabled = self.config.is_server_enabled(server_name)
-            new_enabled = not current_enabled
-
-            if new_enabled:
-                self.config.enabled_servers.add(server_name)
-            else:
-                self.config.enabled_servers.discard(server_name)
-
-            # Update all tools
-            for tool in server.tools:
-                if new_enabled:
-                    if server_name not in self.config.enabled_tools:
-                        self.config.enabled_tools[server_name] = set()
-                    self.config.enabled_tools[server_name].add(tool.name)
-                else:
-                    if server_name in self.config.enabled_tools:
-                        self.config.enabled_tools[server_name].discard(tool.name)
-
-            # Update all resources
-            for resource in server.resources:
-                if new_enabled:
-                    if server_name not in self.config.enabled_resources:
-                        self.config.enabled_resources[server_name] = set()
-                    self.config.enabled_resources[server_name].add(resource.uri)
-                else:
-                    if server_name in self.config.enabled_resources:
-                        self.config.enabled_resources[server_name].discard(resource.uri)
-
-            # Update all prompts
-            for prompt in server.prompts:
-                if new_enabled:
-                    if server_name not in self.config.enabled_prompts:
-                        self.config.enabled_prompts[server_name] = set()
-                    self.config.enabled_prompts[server_name].add(prompt.name)
-                else:
-                    if server_name in self.config.enabled_prompts:
-                        self.config.enabled_prompts[server_name].discard(prompt.name)
-
-            # Update UI
-            self._update_node_label(node, new_enabled)
-
-            # Update children and expand/collapse
-            for child in node.children:
-                if child.data and child.data.get("type") == "category":
-                    # Expand/collapse category nodes
+            # Determine if we should enable or disable all
+            if category == "tools":
+                all_enabled = all(self.config.is_tool_enabled(server_name, t.name) for t in server.tools)
+                new_enabled = not all_enabled
+                
+                if server_name not in self.config.enabled_tools:
+                    self.config.enabled_tools[server_name] = set()
+                
+                for tool in server.tools:
                     if new_enabled:
-                        child.expand()
+                        self.config.enabled_tools[server_name].add(tool.name)
                     else:
-                        child.collapse()
-
-                    # Update all items in category
-                    for item_node in child.children:
-                        self._update_node_label(item_node, new_enabled)
+                        self.config.enabled_tools[server_name].discard(tool.name)
+                
+                # Update child nodes
+                for child in node.children:
+                    self._update_node_label(child, new_enabled)
+                
+            elif category == "resources":
+                all_enabled = all(self.config.is_resource_enabled(server_name, r.uri) for r in server.resources)
+                new_enabled = not all_enabled
+                
+                if server_name not in self.config.enabled_resources:
+                    self.config.enabled_resources[server_name] = set()
+                
+                for resource in server.resources:
+                    if new_enabled:
+                        self.config.enabled_resources[server_name].add(resource.uri)
+                    else:
+                        self.config.enabled_resources[server_name].discard(resource.uri)
+                
+                # Update child nodes
+                for child in node.children:
+                    self._update_node_label(child, new_enabled)
+                    
+            elif category == "prompts":
+                all_enabled = all(self.config.is_prompt_enabled(server_name, p.name) for p in server.prompts)
+                new_enabled = not all_enabled
+                
+                if server_name not in self.config.enabled_prompts:
+                    self.config.enabled_prompts[server_name] = set()
+                
+                for prompt in server.prompts:
+                    if new_enabled:
+                        self.config.enabled_prompts[server_name].add(prompt.name)
+                    else:
+                        self.config.enabled_prompts[server_name].discard(prompt.name)
+                
+                # Update child nodes
+                for child in node.children:
+                    self._update_node_label(child, new_enabled)
+            
+            # Update category label
+            button_text = "[✓ Disable All]" if new_enabled else "[✓ Enable All]"
+            node.set_label(f"{category.title()} ({len(node.children)}) {button_text}")
+            
+            # Auto-save configuration
+            self._auto_save_config()
 
         # Handle tool node
         elif node_type == "tool":
@@ -315,6 +335,9 @@ class ProxyConfigScreen(Screen[None]):
             # Update node label
             self._update_node_label(node, not tool_enabled)
 
+            # Auto-save configuration after tool toggle
+            self._auto_save_config()
+
         # Handle resource node
         elif node_type == "resource":
             server_name = node.data.get("server")
@@ -333,6 +356,9 @@ class ProxyConfigScreen(Screen[None]):
 
             # Update node label
             self._update_node_label(node, not resource_enabled)
+
+            # Auto-save configuration after resource toggle
+            self._auto_save_config()
 
         # Handle prompt node
         elif node_type == "prompt":
@@ -353,6 +379,16 @@ class ProxyConfigScreen(Screen[None]):
             # Update node label
             self._update_node_label(node, not prompt_enabled)
 
+            # Auto-save configuration after prompt toggle
+            self._auto_save_config()
+
+    def _auto_save_config(self) -> None:
+        """Automatically save configuration after changes."""
+        try:
+            self.config.save()
+        except Exception as e:
+            self.app.notify(f"Error auto-saving configuration: {e}", severity="error")
+
     def _update_node_label(self, node: TreeNode[dict[str, Any]], enabled: bool) -> None:
         """Update a node's checkbox in its label.
 
@@ -361,13 +397,23 @@ class ProxyConfigScreen(Screen[None]):
             enabled: Whether the item is enabled
         """
         label = str(node.label)
+
+        # Remove Rich markup tags if present
+        label = label.replace("[bold green]", "").replace("[/bold green]", "")
+        label = label.replace("[dim]", "").replace("[/dim]", "")
+
         # Remove existing checkbox
         if label.startswith("☑ ") or label.startswith("☐ "):
             label = label[2:]
+
         # Add new checkbox
         checkbox = "☑" if enabled else "☐"
-        node.set_label(f"{checkbox} {label}")
+        new_label = f"{checkbox} {label}"
+
+        # Apply Rich markup formatting
+        node.set_label(self._format_label(new_label, enabled))
 
     def action_go_back(self) -> None:
         """Go back to previous screen."""
         self.app.pop_screen()
+
