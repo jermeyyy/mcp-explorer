@@ -218,6 +218,7 @@ TabPane {
 
 /* Detail Panels */
 .detail-panel {
+    height: auto;
     border: solid #3e3e3e;
     padding: 2;
     margin: 0 0 1 0;
@@ -225,8 +226,102 @@ TabPane {
 }
 
 .detail-content {
+    height: auto;
     color: #d4d4d4;
     padding: 1 0 0 0;
+}
+
+/* Tool Detail Screen */
+#tool-detail-container {
+    padding: 2;
+    background: #1e1e1e;
+    height: 100%;
+}
+
+.detail-screen-title {
+    color: #569cd6;
+    text-style: bold;
+    text-align: center;
+    padding: 1 0 2 0;
+    background: #252525;
+    border-bottom: solid #569cd6;
+}
+
+.detail-section-header {
+    color: #4ec9b0;
+    text-style: bold;
+    padding: 2 0 1 0;
+    background: transparent;
+    border-bottom: solid #4ec9b0;
+}
+
+.detail-section {
+    padding: 1 0 2 0;
+    background: transparent;
+    border-bottom: solid #3e3e3e;
+    height: auto;
+}
+
+.detail-section-content {
+    color: #d4d4d4;
+    background: #252525;
+    border-left: solid #569cd6;
+    padding: 1;
+    height: auto;
+}
+
+.detail-section-empty {
+    color: #858585;
+    text-style: italic;
+    padding: 1;
+    height: auto;
+}
+
+.detail-section-json {
+    color: #ce9178;
+    background: #1a1a1a;
+    padding: 1;
+    border-left: solid #569cd6;
+    height: auto;
+}
+
+/* Parameter Items */
+.parameter-item {
+    background: #252525;
+    border: solid #3e3e3e;
+    padding: 1;
+    margin: 0 0 1 0;
+    height: auto;
+}
+
+.param-name {
+    text-style: bold;
+    padding: 0 0 0 0;
+}
+
+.param-required {
+    color: #f48771;
+}
+
+.param-optional {
+    color: #858585;
+}
+
+.param-type {
+    color: #4ec9b0;
+    padding: 0 0 0 2;
+    text-style: italic;
+}
+
+.param-badge {
+    text-style: bold;
+    padding: 0 0 0 0;
+}
+
+.param-description {
+    color: #d4d4d4;
+    padding: 0 0 0 2;
+    margin: 0;
 }
 
 /* Empty States */

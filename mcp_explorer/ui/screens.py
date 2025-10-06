@@ -206,26 +206,46 @@ class ToolDetailScreen(Screen):
         yield Header(show_clock=True)
         yield Footer()
 
-        with VerticalScroll():
-            yield DetailPanel("Tool Name", self.tool.name, classes="detail-panel")
+        with VerticalScroll(id="tool-detail-container"):
+            # Tool name header
+            yield Static(self.tool.name, classes="detail-screen-title")
 
+            # Description section
             if self.tool.description:
-                yield DetailPanel("Description", self.tool.description, classes="detail-panel")
+                yield Static("DESCRIPTION", classes="detail-section-header")
+                yield Static(self.tool.description, classes="detail-section-content")
 
+            # Parameters section
+            yield Static("PARAMETERS", classes="detail-section-header")
             if self.tool.parameters:
-                params_text = "\n\n".join(
-                    f"• {p.name} ({p.type})"
-                    + (f" - {p.description}" if p.description else "")
-                    + (" [REQUIRED]" if p.required else " [optional]")
-                    for p in self.tool.parameters
-                )
-                yield DetailPanel("Parameters", params_text, classes="detail-panel")
+                for param in self.tool.parameters:
+                    # Parameter card
+                    requirement_badge = "[REQUIRED]" if param.required else "[OPTIONAL]"
+                    requirement_class = "param-required" if param.required else "param-optional"
 
+                    with Container(classes="parameter-item"):
+                        # Parameter name with requirement badge
+                        yield Static(
+                            f"• {param.name} {requirement_badge}",
+                            classes=f"param-name {requirement_class}"
+                        )
+
+                        # Type
+                        yield Static(f"Type: {param.type}", classes="param-type")
+
+                        # Description
+                        if param.description:
+                            yield Static(param.description, classes="param-description")
+            else:
+                yield Static("No parameters", classes="detail-section-empty")
+
+            # Input schema section
             if self.tool.input_schema:
+                yield Static("INPUT SCHEMA", classes="detail-section-header")
                 import json
-
-                schema_text = json.dumps(self.tool.input_schema, indent=2)
-                yield DetailPanel("Input Schema", schema_text, classes="detail-panel")
+                # Pretty-print JSON with 2-space indentation and sorted keys for readability
+                schema_text = json.dumps(self.tool.input_schema, indent=2, sort_keys=True, ensure_ascii=False)
+                yield Static(schema_text, classes="detail-section-json")
 
 
 class ResourceDetailScreen(Screen):
