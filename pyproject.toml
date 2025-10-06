@@ -1,0 +1,45 @@
+[project]
+name = "mcp-explorer"
+version = "0.2.0"
+description = "TUI application for discovering and exploring local MCP servers"
+authors = [{ name = "MCP Explorer Team" }]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "textual>=0.47.0",
+    "mcp>=0.9.0",
+    "fastmcp>=2.0.0",
+    "pydantic>=2.0.0",
+    "rich>=13.0.0",
+    "pyjson5>=1.6.0",
+    "tomli-w>=1.0.0",
+]
+
+[project.scripts]
+mcp-explorer = "mcp_explorer.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = []
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true

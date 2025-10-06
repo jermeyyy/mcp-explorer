@@ -1,0 +1,706 @@
+/* Professional MCP Explorer Stylesheet */
+
+/* Global */
+Screen {
+    background: #1e1e1e;
+    color: #d4d4d4;
+}
+
+/* Header */
+Header {
+    dock: top;
+    height: 1;
+    background: #569cd6;
+    color: #000000;
+    text-style: bold;
+}
+
+/* Footer */
+Footer {
+    dock: bottom;
+    height: 1;
+    background: #2d2d2d;
+    color: #858585;
+}
+
+FooterKey .footer-key--key {
+    background: #858585;
+    color: #000000;
+}
+
+FooterKey .footer-key--description {
+    color: #858585;
+}
+
+/* Server List */
+#server-list {
+    width: 100%;
+    height: 100%;
+    background: #1e1e1e;
+}
+
+ListView {
+    background: #1e1e1e;
+    padding: 0 1;
+}
+
+ListItem {
+    background: #1e1e1e;
+    height: auto;
+    padding: 1 2;
+}
+
+ListItem:hover {
+    background: #2d2d2d;
+}
+
+ListItem > Vertical {
+    background: transparent;
+    height: auto;
+    width: 100%;
+}
+
+.server-name {
+    color: #569cd6;
+    text-style: bold;
+}
+
+.server-status {
+    color: #89d185;
+}
+
+.server-status-error {
+    color: #f48771;
+}
+
+.server-capabilities {
+    color: #858585;
+}
+
+.item-description {
+    color: #858585;
+}
+
+/* Detail View */
+#detail-container {
+    layout: horizontal;
+    height: 100%;
+    background: #1e1e1e;
+}
+
+#server-info {
+    width: 35%;
+    border-right: solid #3e3e3e;
+    padding: 0;
+    background: #252525;
+}
+
+#server-info Static {
+    color: #d4d4d4;
+}
+
+/* Server Detail Header */
+.server-detail-name {
+    color: #569cd6;
+    text-style: bold;
+    padding: 2 2 1 2;
+    background: #2d2d2d;
+    text-align: center;
+    border-bottom: solid #569cd6;
+}
+
+.server-detail-description {
+    color: #858585;
+    padding: 1 2;
+    background: #2d2d2d;
+    text-align: center;
+    text-style: italic;
+    border-bottom: solid #3e3e3e;
+}
+
+/* Info Sections */
+.info-section-header {
+    color: #4ec9b0;
+    text-style: bold;
+    padding: 2 2 1 2;
+    background: #1e1e1e;
+    border-bottom: solid #4ec9b0;
+    margin: 0;
+}
+
+.info-section {
+    height: auto;
+    padding: 1 2 2 2;
+    background: transparent;
+    border-bottom: solid #3e3e3e;
+}
+
+.info-label {
+    color: #858585;
+    text-style: bold;
+    padding: 1 0 0 0;
+}
+
+.info-value {
+    color: #d4d4d4;
+    padding: 0 0 0 1;
+}
+
+.info-value-mono {
+    color: #ce9178;
+    text-style: italic;
+    padding: 0 0 0 1;
+}
+
+.detail-title {
+    color: #569cd6;
+    text-style: bold;
+    padding: 1 0;
+}
+
+#capability-tabs {
+    width: 65%;
+}
+
+/* Tabs */
+Tabs {
+    dock: top;
+    background: #2d2d2d;
+}
+
+Tab {
+    background: #2d2d2d;
+    color: #858585;
+    padding: 0 2;
+}
+
+Tab:hover {
+    background: #404040;
+    color: #d4d4d4;
+}
+
+Tab.-active {
+    background: #569cd6;
+    color: #000000;
+    text-style: bold;
+}
+
+TabbedContent {
+    background: #1e1e1e;
+}
+
+TabPane {
+    padding: 1;
+    background: #1e1e1e;
+}
+
+/* Capability Lists */
+.capability-list {
+    background: #1e1e1e;
+    padding: 0 1;
+}
+
+.item-name {
+    color: #4ec9b0;
+    text-style: bold;
+}
+
+.item-params {
+    color: #c586c0;
+    text-style: italic;
+}
+
+.tool-item:hover,
+.resource-item:hover,
+.prompt-item:hover {
+    background: #404040;
+}
+
+/* Detail Panels */
+.detail-panel {
+    border: solid #3e3e3e;
+    padding: 2;
+    margin: 0 0 1 0;
+    background: #252525;
+}
+
+.detail-content {
+    color: #d4d4d4;
+    padding: 1 0 0 0;
+}
+
+/* Empty States */
+.empty-state {
+    align: center middle;
+    color: #858585;
+}
+
+/* Buttons */
+Button {
+    background: #2d2d2d;
+    color: #569cd6;
+    border: solid #3e3e3e;
+    margin: 1;
+}
+
+Button:hover {
+    background: #569cd6;
+    color: #000000;
+}
+
+Button.-primary {
+    background: #569cd6;
+    color: #000000;
+}
+
+/* Dialogs */
+#preview-container {
+    width: 80;
+    height: 24;
+    border: solid #3e3e3e;
+    background: #252525;
+}
+
+#preview-content {
+    padding: 2;
+    background: #1e1e1e;
+    color: #d4d4d4;
+}
+
+/* Splash Screen */
+#splash-container {
+    align: center middle;
+    background: #1e1e1e;
+    layout: vertical;
+}
+
+#splash-logo {
+    text-align: center;
+    content-align: center middle;
+    height: auto;
+    width: 100%;
+    text-style: bold;
+    padding: 2 0 2 0;
+}
+
+#splash-title {
+    color: #569cd6;
+    text-align: center;
+    text-style: bold;
+    width: 100%;
+    padding: 0 0 1 0;
+}
+
+#splash-subtitle {
+    color: #858585;
+    text-align: center;
+    width: 100%;
+    padding: 0 0 2 0;
+}
+
+#splash-spacer {
+    height: 2;
+    width: 100%;
+}
+
+#splash-status {
+    color: #d4d4d4;
+    text-align: center;
+    width: 100%;
+    padding: 1;
+}
+
+#splash-progress-container {
+    width: 100%;
+    height: auto;
+    align: center middle;
+}
+
+#splash-progress {
+    width: 50%;
+}
+
+#splash-progress-percent {
+    width: 50%;
+    text-align: center;
+    color: #858585;
+    padding: 0;
+    margin-top: 1;
+}
+
+ProgressBar {
+    background: #2d2d2d;
+}
+
+ProgressBar > .bar--bar {
+    color: #569cd6;
+}
+
+ProgressBar > .bar--complete {
+    color: #4ec9b0;
+}
+
+/* Scrollbars */
+ScrollBar {
+    background: #2d2d2d;
+}
+
+ScrollBar > .scrollbar--thumb {
+    background: #569cd6;
+}
+
+/* Containers */
+Container {
+    background: transparent;
+}
+
+Vertical, Horizontal {
+    background: transparent;
+}
+
+/* Log Viewer */
+#log-viewer-container {
+    height: 100%;
+    background: #1e1e1e;
+}
+
+#log-search-bar {
+    background: #252525;
+    padding: 1;
+    border-bottom: solid #3e3e3e;
+    height: 3;
+}
+
+#search-input {
+    width: 1fr;
+    margin: 0 1 0 0;
+}
+
+.search-nav-btn {
+    width: 5;
+    min-width: 5;
+    margin: 0;
+}
+
+.search-results {
+    width: 12;
+    color: #4ec9b0;
+    text-align: center;
+    margin: 0 0 0 1;
+}
+
+#log-content {
+    height: 1fr;
+}
+
+#log-list-container {
+    width: 1fr;
+    background: #1e1e1e;
+}
+
+.log-stats {
+    background: #252525;
+    color: #569cd6;
+    padding: 1;
+    text-style: bold;
+    border-bottom: solid #3e3e3e;
+}
+
+#log-list {
+    background: #1e1e1e;
+}
+
+#filter-sidebar {
+    width: 20;
+    background: #252525;
+    border-left: solid #3e3e3e;
+    padding: 1;
+}
+
+.filter-sidebar-title {
+    color: #569cd6;
+    text-style: bold;
+    text-align: center;
+    padding: 0 0 1 0;
+}
+
+.filter-section-label {
+    color: #858585;
+    padding: 1 0 0 0;
+    text-style: bold;
+}
+
+.filter-btn {
+    width: 100%;
+    margin: 0 0 1 0;
+}
+
+/* Claude-inspired log entry card - applied directly to ListItem */
+ListItem.log-entry-card {
+    background: #252525;
+    border: solid #3e3e3e;
+    margin: 0 1 1 1;
+    padding: 0;
+    height: auto;
+}
+
+ListItem.log-entry-card:hover {
+    border: solid #569cd6;
+    background: #2a2a2a;
+}
+
+.log-entry-header {
+    background: transparent;
+    padding: 0 0 1 0;
+    height: auto;
+}
+
+.log-status-dot {
+    width: 2;
+    text-align: left;
+    text-style: bold;
+}
+
+.log-status-success {
+    color: #89d185;
+}
+
+.log-status-error {
+    color: #f48771;
+}
+
+.log-status-pending {
+    color: #c586c0;
+}
+
+.log-time {
+    width: 10;
+    color: #858585;
+    text-style: italic;
+}
+
+.log-operation {
+    width: 1fr;
+    color: #4ec9b0;
+    text-style: bold;
+}
+
+.log-duration {
+    width: 8;
+    color: #858585;
+    text-align: right;
+}
+
+/* Content area with inline preview */
+.log-entry-content {
+    background: transparent;
+    padding: 0;
+    height: auto;
+}
+
+.log-content-preview {
+    background: #1e1e1e;
+    padding: 0;
+    color: #d4d4d4;
+    border-left: solid #569cd6;
+    margin: 0;
+    height: auto;
+}
+
+.log-expand-btn {
+    width: auto;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    color: #569cd6;
+    border: none;
+    height: 1;
+}
+
+.log-expand-btn:hover {
+    background: #404040;
+    color: #4ec9b0;
+}
+
+/* Expanded details */
+.log-entry-details {
+    background: #1e1e1e;
+    padding: 0;
+    margin: 0;
+    border: solid #3e3e3e;
+    height: auto;
+}
+
+.log-detail-label {
+    color: #858585;
+    text-style: bold;
+    padding: 0;
+}
+
+.log-error-label {
+    color: #f48771;
+}
+
+.log-detail-json {
+    background: #181818;
+    padding: 0;
+    color: #d4d4d4;
+    border-left: solid #569cd6;
+    margin: 0;
+}
+
+.log-error-content {
+    background: #2a1a1a;
+    padding: 0;
+    color: #f48771;
+    border-left: solid #f48771;
+    margin: 0;
+}
+
+/* Proxy Config */
+#proxy-config-container {
+    height: 100%;
+    background: #1e1e1e;
+}
+
+#proxy-control-panel {
+    background: #252525;
+    padding: 1 2;
+    border-bottom: solid #569cd6;
+    height: auto;
+}
+
+.proxy-config-title {
+    color: #569cd6;
+    text-style: bold;
+    padding: 0 0 0 0;
+    text-align: center;
+}
+
+.proxy-settings-row {
+    padding: 0;
+    height: auto;
+}
+
+.setting-label {
+    width: 8;
+    color: #d4d4d4;
+}
+
+.status-label {
+    width: 10;
+    text-align: right;
+}
+
+.port-input {
+    width: 15;
+    margin: 0 2 0 0;
+}
+
+.proxy-status {
+    text-style: bold;
+}
+
+.proxy-running {
+    color: #89d185;
+}
+
+.proxy-stopped {
+    color: #858585;
+}
+
+.proxy-buttons-row {
+    padding: 0;
+    height: auto;
+    align: center middle;
+}
+
+.section-title {
+    color: #569cd6;
+    text-style: bold;
+    padding: 1;
+    background: #2d2d2d;
+    height: auto;
+}
+
+#server-configs {
+    background: #1e1e1e;
+    padding: 1;
+}
+
+.server-config-widget {
+    background: #252525;
+    border: solid #3e3e3e;
+    margin: 0 0 1 0;
+}
+
+.server-config-header {
+    padding: 1;
+    background: #2d2d2d;
+}
+
+.server-checkbox {
+    width: 3;
+}
+
+.server-config-name {
+    width: 1fr;
+    color: #4ec9b0;
+    text-style: bold;
+    margin: 0 0 0 1;
+}
+
+.server-config-counts {
+    width: auto;
+    color: #858585;
+}
+
+.expand-button {
+    width: 4;
+    min-width: 4;
+}
+
+.server-config-details {
+    background: #1e1e1e;
+    padding: 1 2;
+}
+
+.config-section-title {
+    color: #569cd6;
+    text-style: bold;
+    padding: 1 0 0 0;
+}
+
+.config-section {
+    padding: 0 0 1 1;
+}
+
+.config-item {
+    padding: 0 0 0 0;
+}
+
+/* Tree Widgets */
+Tree {
+    background: #1e1e1e;
+    color: #d4d4d4;
+}
+
+Tree > .tree--cursor {
+    background: #404040;
+}
+
+Tree > .tree--highlight {
+    background: #2d2d2d;
+}
+
+Tree > .tree--guides {
+    color: #3e3e3e;
+}
+
+Tree > .tree--guides-hover {
+    color: #569cd6;
+}
+
+Tree > .tree--guides-selected {
+    color: #569cd6;
+}

@@ -1,0 +1,34 @@
+{
+  "servers": {
+    "python-server": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/path/to/project",
+        "server.py"
+      ],
+      "env": {},
+      "description": "Python-based MCP server"
+    },
+    "java-server": {
+      "type": "stdio",
+      "command": "/usr/bin/java",
+      "args": [
+        "-classpath",
+        "/path/to/server.jar",
+        "com.example.McpServer"
+      ],
+      "env": {
+        "PORT": "8080"
+      },
+      "description": "Java MCP server"
+    },
+    "sse-server": {
+      "type": "sse",
+      "url": "http://localhost:6280/sse",
+      "description": "HTTP-based MCP documentation server"
+    }
+  }
+}
