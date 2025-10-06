@@ -47,13 +47,72 @@ class ServerListScreen(Screen):
         yield Header(show_clock=True)
         yield Footer()
 
-        if not self.servers:
-            yield Container(
-                Static("No MCP servers found. Check your configuration.", classes="empty-state"),
-                id="empty-state",
+        # Main container with proxy bar and content
+        with Vertical(id="main-container"):
+            # Proxy control bar - fixed at top
+            with Horizontal(id="proxy-control-bar"):
+                yield Static("Proxy:", classes="proxy-bar-label")
+
+                # Get proxy config from app
+                proxy_config = self.app.proxy_config  # type: ignore
+                if proxy_config.enabled:
+                    yield Static("● RUNNING", classes="proxy-bar-status proxy-bar-running")
+                    yield Static(f"Port: {proxy_config.port}", classes="proxy-bar-port")
+                    yield Button("⏹ Stop", id="proxy-toggle-btn", variant="error", classes="proxy-bar-button")
+                else:
+                    yield Static("○ STOPPED", classes="proxy-bar-status proxy-bar-stopped")
+                    yield Static(f"Port: {proxy_config.port}", classes="proxy-bar-port")
+                    yield Button("▶ Start", id="proxy-toggle-btn", variant="success", classes="proxy-bar-button")
+
+            # Content area - scrollable
+            if not self.servers:
+                yield Container(
+                    Static("No MCP servers found. Check your configuration.", classes="empty-state"),
+                    id="empty-state",
+                )
+            else:
+                yield ListView(*[ServerListItem(server) for server in self.servers], id="server-list")
+
+    @on(Button.Pressed, "#proxy-toggle-btn")
+    async def toggle_proxy(self) -> None:
+        """Toggle proxy server on/off."""
+        from ..proxy import ProxyServer
+
+        proxy_config = self.app.proxy_config  # type: ignore
+        proxy_config.enabled = not proxy_config.enabled
+
+        # Start or stop the proxy server
+        if proxy_config.enabled:
+            # Stop any existing proxy server first
+            if self.app.proxy_server:  # type: ignore
+                if self.app.proxy_server.is_running():  # type: ignore
+                    await self.app.proxy_server.stop()  # type: ignore
+                self.app.proxy_server = None  # type: ignore
+
+            # Create and start new proxy server
+            import asyncio
+            self.app.proxy_server = ProxyServer(  # type: ignore
+                servers=self.servers,
+                config=proxy_config,
+                logger=self.app.proxy_logger,  # type: ignore
             )
+            # Start server in background task
+            asyncio.create_task(self.app.proxy_server.start())  # type: ignore
+            self.notify(f"Proxy server started on port {proxy_config.port}", severity="information")
         else:
-            yield ListView(*[ServerListItem(server) for server in self.servers], id="server-list")
+            # Stop proxy server
+            if self.app.proxy_server:  # type: ignore
+                if self.app.proxy_server.is_running():  # type: ignore
+                    await self.app.proxy_server.stop()  # type: ignore
+                self.app.proxy_server = None  # type: ignore
+            self.notify("Proxy server stopped", severity="information")
+
+        # Update subtitle and refresh screen
+        self.app.update_subtitle()  # type: ignore
+        self.refresh()
+
+        # Refresh the control bar to show updated status
+        await self.recompose()
 
     @on(ListView.Selected, "#server-list")
     def show_server_detail(self, event: ListView.Selected) -> None:

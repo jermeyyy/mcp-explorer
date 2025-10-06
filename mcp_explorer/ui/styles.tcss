@@ -32,11 +32,59 @@ FooterKey .footer-key--description {
     color: #858585;
 }
 
+/* Server List Screen Layout */
+#main-container {
+    width: 100%;
+    height: 100%;
+    layout: vertical;
+}
+
 /* Server List */
 #server-list {
     width: 100%;
-    height: 100%;
+    height: 1fr;
     background: #1e1e1e;
+}
+
+/* Proxy Control Bar on Main Screen */
+#proxy-control-bar {
+    width: 100%;
+    height: 3;
+    background: #252525;
+    border-bottom: solid #569cd6;
+    padding: 0 2;
+    align: left middle;
+}
+
+.proxy-bar-label {
+    width: 8;
+    color: #d4d4d4;
+    text-style: bold;
+}
+
+.proxy-bar-status {
+    width: 12;
+    text-style: bold;
+}
+
+.proxy-bar-running {
+    color: #89d185;
+}
+
+.proxy-bar-stopped {
+    color: #858585;
+}
+
+.proxy-bar-port {
+    width: 12;
+    color: #858585;
+}
+
+.proxy-bar-button {
+    width: 12;
+    margin: 0 0 0 2;
+    border: none;
+    padding: 0 1;
 }
 
 ListView {

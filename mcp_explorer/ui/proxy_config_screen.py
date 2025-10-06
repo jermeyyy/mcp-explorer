@@ -62,7 +62,7 @@ class ProxyConfigScreen(Screen[None]):
                 # Control buttons
                 with Horizontal(classes="proxy-buttons-row"):
                     if self.config.enabled:
-                        yield Button("⬛ Stop Proxy", id="toggle-proxy", variant="error")
+                        yield Button("⏹ Stop Proxy", id="toggle-proxy", variant="error")
                     else:
                         yield Button("▶ Start Proxy", id="toggle-proxy", variant="success")
 
