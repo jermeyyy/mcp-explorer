@@ -110,6 +110,36 @@ class PromptListItem(ListItem):
                 yield Static(arg_summary, classes="item-params")
 
 
+class ConfigFileHeader(ListItem):
+    """A header item representing a configuration file source."""
+
+    def __init__(self, config_file: str, server_count: int) -> None:
+        """Initialize the config file header."""
+        super().__init__()
+        self.config_file = config_file
+        self.server_count = server_count
+        self.can_focus = False  # Headers cannot be selected
+
+    def compose(self) -> ComposeResult:
+        """Compose the config file header."""
+        from pathlib import Path
+
+        # Shorten path if it's in home directory
+        display_path = self.config_file
+        try:
+            path = Path(self.config_file)
+            home = Path.home()
+            if path.is_relative_to(home):
+                display_path = f"~/{path.relative_to(home)}"
+        except (ValueError, Exception):
+            pass
+
+        header_text = f"📁 {display_path}"
+        count_text = f"({self.server_count} server{'s' if self.server_count != 1 else ''})"
+
+        yield Static(f"{header_text} {count_text}", classes="config-file-header")
+
+
 class DetailPanel(Container):
     """A panel for displaying detailed information."""
 

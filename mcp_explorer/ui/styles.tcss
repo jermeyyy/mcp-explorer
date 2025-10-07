@@ -108,6 +108,15 @@ ListItem > Vertical {
     width: 100%;
 }
 
+/* Config File Headers */
+.config-file-header {
+    color: #4ec9b0;
+    text-style: bold;
+    background: #252525;
+    padding: 1;
+    border-bottom: solid #4ec9b0;
+}
+
 .server-name {
     color: #569cd6;
     text-style: bold;

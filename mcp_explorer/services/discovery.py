@@ -3,7 +3,7 @@
 import asyncio
 from typing import Any, Dict, List
 
-from ..models import MCPServer, ServerType
+from ..models import MCPServer, ServerType, ConfigFile
 from .client import MCPClientService
 from .config_loader import MCPConfigLoader
 
@@ -16,20 +16,61 @@ class MCPDiscoveryService:
         self.config_loader = MCPConfigLoader()
         self.client_service = MCPClientService()
 
-    async def discover_all_servers(self) -> List[MCPServer]:
-        """Discover and initialize all configured MCP servers."""
-        server_configs = self.config_loader.discover_servers()
+    async def discover_all_servers_hierarchical(self) -> List[ConfigFile]:
+        """Discover and initialize all configured MCP servers maintaining hierarchy.
 
-        if not server_configs:
+        Returns:
+            List of ConfigFile objects, each containing initialized MCPServer objects.
+        """
+        config_files_data = self.config_loader.discover_servers_hierarchical()
+
+        if not config_files_data:
             return []
 
-        # Create tasks for parallel server discovery
-        tasks = [self._init_server(name, config) for name, config in server_configs.items()]
+        # Process each config file
+        initialized_config_files: List[ConfigFile] = []
 
-        servers = await asyncio.gather(*tasks, return_exceptions=True)
+        for config_file_data in config_files_data:
+            path = config_file_data["path"]
+            servers_data = config_file_data["servers"]
 
-        # Filter out exceptions and return successful servers
-        return [server for server in servers if isinstance(server, MCPServer)]
+            # Create tasks for parallel server initialization within this config
+            tasks = []
+            for server_data in servers_data:
+                name = server_data["name"]
+                config = server_data["config"]
+                tasks.append(self._init_server(name, config))
+
+            if tasks:
+                # Initialize all servers from this config file in parallel
+                servers = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # Filter out exceptions and create new ConfigFile with initialized servers
+                initialized_servers = [s for s in servers if isinstance(s, MCPServer)]
+
+                if initialized_servers:
+                    initialized_config_file = ConfigFile(
+                        path=path,
+                        servers=initialized_servers
+                    )
+                    initialized_config_files.append(initialized_config_file)
+
+        return initialized_config_files
+
+    async def discover_all_servers(self) -> List[MCPServer]:
+        """Discover and initialize all configured MCP servers (flattened list).
+
+        Returns:
+            Flat list of all MCPServer objects from all config files.
+        """
+        config_files = await self.discover_all_servers_hierarchical()
+
+        # Flatten the hierarchy into a single list
+        all_servers: List[MCPServer] = []
+        for config_file in config_files:
+            all_servers.extend(config_file.servers)
+
+        return all_servers
 
     async def _init_server(self, name: str, config: Dict[str, Any]) -> MCPServer:
         """Initialize a single server from its configuration."""

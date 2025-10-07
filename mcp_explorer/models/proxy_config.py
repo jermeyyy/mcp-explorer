@@ -2,7 +2,7 @@
 
 import tomllib
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, Set
 
 import tomli_w
 from pydantic import BaseModel, Field
@@ -14,57 +14,109 @@ class ProxyConfig(BaseModel):
     enabled: bool = False
     port: int = 3000
 
-    # Server filtering
-    enabled_servers: Set[str] = Field(default_factory=set)  # Server names to expose
+    # Server filtering - using composite key: "config_file_path:server_name"
+    enabled_servers: Set[str] = Field(default_factory=set)  # Server keys to expose
 
-    # Tool filtering per server
-    enabled_tools: Dict[str, Set[str]] = Field(default_factory=dict)  # server -> tool names
+    # Tool filtering per server - using composite key: "config_file_path:server_name"
+    enabled_tools: Dict[str, Set[str]] = Field(default_factory=dict)  # server_key -> tool names
 
-    # Resource filtering per server
-    enabled_resources: Dict[str, Set[str]] = Field(default_factory=dict)  # server -> resource URIs
+    # Resource filtering per server - using composite key: "config_file_path:server_name"
+    enabled_resources: Dict[str, Set[str]] = Field(default_factory=dict)  # server_key -> resource URIs
 
-    # Prompt filtering per server
-    enabled_prompts: Dict[str, Set[str]] = Field(default_factory=dict)  # server -> prompt names
+    # Prompt filtering per server - using composite key: "config_file_path:server_name"
+    enabled_prompts: Dict[str, Set[str]] = Field(default_factory=dict)  # server_key -> prompt names
 
     # Logging
     enable_logging: bool = True
     max_log_entries: int = 1000
 
-    def is_server_enabled(self, server_name: str) -> bool:
-        """Check if a server is enabled."""
-        return server_name in self.enabled_servers if self.enabled_servers else True
+    @staticmethod
+    def make_server_key(config_file_path: str, server_name: str) -> str:
+        """Create a unique key for a server from a specific config file.
 
-    def is_tool_enabled(self, server_name: str, tool_name: str) -> bool:
-        """Check if a tool is enabled."""
-        if server_name not in self.enabled_tools:
-            return True  # All tools enabled by default
-        return tool_name in self.enabled_tools[server_name]
+        Args:
+            config_file_path: Path to the config file
+            server_name: Name of the server
 
-    def is_resource_enabled(self, server_name: str, resource_uri: str) -> bool:
-        """Check if a resource is enabled."""
-        if server_name not in self.enabled_resources:
-            return True
-        return resource_uri in self.enabled_resources[server_name]
+        Returns:
+            Composite key in format "config_file_path:server_name"
+        """
+        return f"{config_file_path}:{server_name}"
 
-    def is_prompt_enabled(self, server_name: str, prompt_name: str) -> bool:
-        """Check if a prompt is enabled."""
-        if server_name not in self.enabled_prompts:
-            return True
-        return prompt_name in self.enabled_prompts[server_name]
+    def is_server_enabled(self, config_file_path: str, server_name: str) -> bool:
+        """Check if a server is enabled.
 
-    def enable_all_for_server(self, server_name: str) -> None:
-        """Enable all tools/resources/prompts for a server."""
-        self.enabled_servers.add(server_name)
-        if server_name in self.enabled_tools:
-            del self.enabled_tools[server_name]
-        if server_name in self.enabled_resources:
-            del self.enabled_resources[server_name]
-        if server_name in self.enabled_prompts:
-            del self.enabled_prompts[server_name]
+        Args:
+            config_file_path: Path to the config file
+            server_name: Name of the server
+        """
+        server_key = self.make_server_key(config_file_path, server_name)
+        return server_key in self.enabled_servers if self.enabled_servers else True
 
-    def disable_server(self, server_name: str) -> None:
-        """Disable a server completely."""
-        self.enabled_servers.discard(server_name)
+    def is_tool_enabled(self, config_file_path: str, server_name: str, tool_name: str) -> bool:
+        """Check if a tool is enabled.
+
+        Args:
+            config_file_path: Path to the config file
+            server_name: Name of the server
+            tool_name: Name of the tool
+        """
+        server_key = self.make_server_key(config_file_path, server_name)
+        if server_key not in self.enabled_tools:
+            return False  # No tools enabled by default for this server
+        return tool_name in self.enabled_tools[server_key]
+
+    def is_resource_enabled(self, config_file_path: str, server_name: str, resource_uri: str) -> bool:
+        """Check if a resource is enabled.
+
+        Args:
+            config_file_path: Path to the config file
+            server_name: Name of the server
+            resource_uri: URI of the resource
+        """
+        server_key = self.make_server_key(config_file_path, server_name)
+        if server_key not in self.enabled_resources:
+            return False  # No resources enabled by default
+        return resource_uri in self.enabled_resources[server_key]
+
+    def is_prompt_enabled(self, config_file_path: str, server_name: str, prompt_name: str) -> bool:
+        """Check if a prompt is enabled.
+
+        Args:
+            config_file_path: Path to the config file
+            server_name: Name of the server
+            prompt_name: Name of the prompt
+        """
+        server_key = self.make_server_key(config_file_path, server_name)
+        if server_key not in self.enabled_prompts:
+            return False  # No prompts enabled by default
+        return prompt_name in self.enabled_prompts[server_key]
+
+    def enable_all_for_server(self, config_file_path: str, server_name: str) -> None:
+        """Enable all tools/resources/prompts for a server.
+
+        Args:
+            config_file_path: Path to the config file
+            server_name: Name of the server
+        """
+        server_key = self.make_server_key(config_file_path, server_name)
+        self.enabled_servers.add(server_key)
+        if server_key in self.enabled_tools:
+            del self.enabled_tools[server_key]
+        if server_key in self.enabled_resources:
+            del self.enabled_resources[server_key]
+        if server_key in self.enabled_prompts:
+            del self.enabled_prompts[server_key]
+
+    def disable_server(self, config_file_path: str, server_name: str) -> None:
+        """Disable a server completely.
+
+        Args:
+            config_file_path: Path to the config file
+            server_name: Name of the server
+        """
+        server_key = self.make_server_key(config_file_path, server_name)
+        self.enabled_servers.discard(server_key)
 
     @classmethod
     def get_config_path(cls) -> Path:

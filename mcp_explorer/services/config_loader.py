@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from ..models import ConfigFile
+
 try:
     import pyjson5
 
@@ -36,6 +38,7 @@ class MCPConfigLoader:
 
         # Alternative config locations
         alt_paths = [
+            home / "mcp.json",
             home / ".config" / "github-copilot" / "intellij" / "mcp.json",
             home / ".config" / "mcp" / "config.json",
             home / ".mcp" / "config.json",
@@ -160,13 +163,23 @@ class MCPConfigLoader:
         return True, None
 
     @classmethod
-    def discover_servers(cls) -> Dict[str, Dict[str, Any]]:
-        """Discover all configured MCP servers with validation."""
-        all_servers: Dict[str, Dict[str, Any]] = {}
+    def discover_servers_hierarchical(cls) -> List[Dict[str, Any]]:
+        """Discover all configured MCP servers maintaining config file hierarchy.
 
-        for config_path in cls.get_config_paths():
+        Returns:
+            List of dicts with 'path' and 'servers' keys, where servers is a list of
+            {'name': str, 'config': dict} entries.
+        """
+        config_files: List[Dict[str, Any]] = []
+        config_paths = cls.get_config_paths()
+
+        print(f"🔍 Discovering servers from {len(config_paths)} config file(s)...")
+
+        for config_path in config_paths:
+            print(f"  📄 Processing: {config_path}")
             config = cls.load_config_file(config_path)
             if not config:
+                print(f"     ✗ Failed to load config")
                 continue
 
             # Handle different config formats
@@ -180,6 +193,77 @@ class MCPConfigLoader:
             if not isinstance(servers, dict):
                 print(f"⚠ Invalid servers format in {config_path}")
                 continue
+
+            print(f"     ✓ Found {len(servers)} server(s): {list(servers.keys())}")
+
+            # Create config file entry
+            config_file_data = {
+                "path": str(config_path),
+                "servers": []
+            }
+
+            # Validate and add servers to this config file
+            for name, server_config in servers.items():
+                if not isinstance(server_config, dict):
+                    print(f"⚠ Invalid config for server '{name}' in {config_path}")
+                    continue
+
+                # Validate server config
+                is_valid, error_msg = cls.validate_server_config(name, server_config)
+                if not is_valid:
+                    print(f"⚠ Invalid config for server '{name}': {error_msg}")
+                    # Still add it but mark the error
+                    server_config["_validation_error"] = error_msg
+
+                # Add source file for debugging
+                server_config["_source_file"] = str(config_path)
+
+                # Store the server config
+                config_file_data["servers"].append({
+                    "name": name,
+                    "config": server_config
+                })
+
+            if config_file_data["servers"]:
+                config_files.append(config_file_data)
+
+        print(f"\n✅ Total config files: {len(config_files)}")
+        total_servers = sum(len(cf["servers"]) for cf in config_files)
+        print(f"✅ Total servers discovered: {total_servers}")
+        return config_files
+
+    @classmethod
+    def discover_servers(cls) -> Dict[str, Dict[str, Any]]:
+        """Discover all configured MCP servers with validation.
+
+        DEPRECATED: Use discover_servers_hierarchical() instead.
+        This method flattens the hierarchy for backward compatibility.
+        """
+        all_servers: Dict[str, Dict[str, Any]] = {}
+        config_paths = cls.get_config_paths()
+
+        print(f"🔍 Discovering servers from {len(config_paths)} config file(s)...")
+
+        for config_path in config_paths:
+            print(f"  📄 Processing: {config_path}")
+            config = cls.load_config_file(config_path)
+            if not config:
+                print(f"     ✗ Failed to load config")
+                continue
+
+            # Handle different config formats
+            if "mcpServers" in config:
+                servers = config["mcpServers"]
+            elif "servers" in config:
+                servers = config["servers"]
+            else:
+                servers = config
+
+            if not isinstance(servers, dict):
+                print(f"⚠ Invalid servers format in {config_path}")
+                continue
+
+            print(f"     ✓ Found {len(servers)} server(s): {list(servers.keys())}")
 
             # Validate and merge servers
             for name, server_config in servers.items():
@@ -197,9 +281,28 @@ class MCPConfigLoader:
                 # Add source file for debugging
                 server_config["_source_file"] = str(config_path)
 
-                # Merge (later configs override earlier ones)
-                all_servers[name] = server_config
+                # Handle duplicate server names by making them unique
+                unique_name = name
+                if name in all_servers:
+                    # Check if it's the exact same config (same source file)
+                    existing_source = all_servers[name].get("_source_file")
+                    if existing_source == str(config_path):
+                        # Same server in same file, just override
+                        print(f"     ⚠️  Duplicate server '{name}' in same config (overriding)")
+                    else:
+                        # Different config file, make name unique
+                        counter = 2
+                        while f"{name}#{counter}" in all_servers:
+                            counter += 1
+                        unique_name = f"{name}#{counter}"
+                        print(f"     ⚠️  Server '{name}' already exists from {existing_source}")
+                        print(f"         → Renaming to '{unique_name}' to keep both")
+                        # Store original name for reference
+                        server_config["_original_name"] = name
 
+                all_servers[unique_name] = server_config
+
+        print(f"\n✅ Total servers discovered: {len(all_servers)}")
         return all_servers
 
     @classmethod

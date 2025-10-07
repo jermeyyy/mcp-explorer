@@ -19,8 +19,9 @@ from textual.widgets import (
     TabPane,
 )
 
-from ..models import MCPPrompt, MCPServer, MCPTool, MCPResource
+from ..models import MCPPrompt, MCPServer, MCPTool, MCPResource, ConfigFile
 from .widgets import (
+    ConfigFileHeader,
     DetailPanel,
     PromptListItem,
     ResourceListItem,
@@ -37,10 +38,10 @@ class ServerListScreen(Screen):
         ("r", "refresh", "Refresh"),
     ]
 
-    def __init__(self, servers: list[MCPServer]) -> None:
+    def __init__(self, config_files: list[ConfigFile]) -> None:
         """Initialize the server list screen."""
         super().__init__()
-        self.servers = servers
+        self.config_files = config_files
 
     def compose(self) -> ComposeResult:
         """Compose the server list screen."""
@@ -65,13 +66,23 @@ class ServerListScreen(Screen):
                     yield Button("▶ Start", id="proxy-toggle-btn", variant="success", classes="proxy-bar-button")
 
             # Content area - scrollable
-            if not self.servers:
+            if not self.config_files:
                 yield Container(
                     Static("No MCP servers found. Check your configuration.", classes="empty-state"),
                     id="empty-state",
                 )
             else:
-                yield ListView(*[ServerListItem(server) for server in self.servers], id="server-list")
+                # Build list items hierarchically from config files
+                list_items = []
+
+                for config_file in self.config_files:
+                    # Add header for this config file
+                    list_items.append(ConfigFileHeader(config_file.path, len(config_file.servers)))
+                    # Add all servers from this config
+                    for server in config_file.servers:
+                        list_items.append(ServerListItem(server))
+
+                yield ListView(*list_items, id="server-list")
 
     @on(Button.Pressed, "#proxy-toggle-btn")
     async def toggle_proxy(self) -> None:
@@ -117,8 +128,10 @@ class ServerListScreen(Screen):
     @on(ListView.Selected, "#server-list")
     def show_server_detail(self, event: ListView.Selected) -> None:
         """Show detail view for selected server."""
+        # Only show details for ServerListItem, not ConfigFileHeader
         if isinstance(event.item, ServerListItem):
             self.app.push_screen(ServerDetailScreen(event.item.server))  # type: ignore
+        # Prevent selection of headers by not doing anything
 
     def action_refresh(self) -> None:
         """Refresh the server list."""

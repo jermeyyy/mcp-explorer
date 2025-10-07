@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from textual.app import App
 
-from ..models import MCPServer, ProxyConfig
+from ..models import MCPServer, ProxyConfig, ConfigFile
 from ..proxy import ProxyLogger, ProxyServer
 from ..services import MCPDiscoveryService
 from .screens import LoadingScreen, ServerListScreen, SplashScreen
@@ -31,6 +31,7 @@ class MCPExplorerApp(App):
         """Initialize the MCP Explorer app."""
         super().__init__()
         self.discovery_service = MCPDiscoveryService()
+        self.config_files: List[ConfigFile] = []
         self.servers: List[MCPServer] = []
 
         # Proxy components - load config from file
@@ -91,7 +92,7 @@ class MCPExplorerApp(App):
 
         # Pop splash screen and show server list
         await self.pop_screen()
-        await self.push_screen(ServerListScreen(self.servers))
+        await self.push_screen(ServerListScreen(self.config_files))
 
     async def _discover_with_progress(self, splash: SplashScreen) -> None:
         """Discover servers and update progress in real-time.
@@ -99,50 +100,39 @@ class MCPExplorerApp(App):
         Args:
             splash: The splash screen to update with progress
         """
-        # Get server configurations
-        server_configs = self.discovery_service.config_loader.discover_servers()
+        # Discover servers hierarchically
+        self.config_files = await self.discovery_service.discover_all_servers_hierarchical()
 
-        if not server_configs:
-            self.servers = []
-            return
-
-        total_servers = len(server_configs)
+        # Also maintain flat list for backward compatibility
         self.servers = []
+        for config_file in self.config_files:
+            self.servers.extend(config_file.servers)
 
-        # Process servers one by one to show progress
-        for idx, (name, config) in enumerate(server_configs.items(), 1):
-            # Update progress: 50% (scan complete) + up to 25% for connection progress
-            progress = 50 + int((idx / total_servers) * 25)
-
-            # Update UI
+        # Update progress
+        total_servers = len(self.servers)
+        if total_servers > 0:
             splash.update_status(
-                f"Connecting to {name} ({idx}/{total_servers})",
-                progress
+                f"Initialized {total_servers} server{'s' if total_servers != 1 else ''} from {len(self.config_files)} config file{'s' if len(self.config_files) != 1 else ''}",
+                75
             )
-
-            # Yield control to the event loop to keep animations smooth
-            await asyncio.sleep(0.05)
-
-            # Initialize the server
-            try:
-                server = await self.discovery_service._init_server(name, config)
-                self.servers.append(server)
-            except Exception as e:
-                print(f"Error initializing {name}: {e}")
-
-            # Yield control again after processing
-            await asyncio.sleep(0.05)
+        else:
+            splash.update_status("No servers found", 75)
 
     async def load_servers(self) -> None:
         """Load all MCP servers."""
         try:
-            self.servers = await self.discovery_service.discover_all_servers()
+            self.config_files = await self.discovery_service.discover_all_servers_hierarchical()
+            # Maintain flat list for backward compatibility
+            self.servers = []
+            for config_file in self.config_files:
+                self.servers.extend(config_file.servers)
         except Exception as e:
             print(f"Error loading servers: {e}")
             import traceback
 
             traceback.print_exc()
-            # Initialize with empty list if discovery fails completely
+            # Initialize with empty lists if discovery fails completely
+            self.config_files = []
             self.servers = []
 
     async def action_refresh_servers(self) -> None:
@@ -180,11 +170,11 @@ class MCPExplorerApp(App):
 
         # Pop splash screen and show updated server list
         await self.pop_screen()
-        await self.push_screen(ServerListScreen(self.servers))
+        await self.push_screen(ServerListScreen(self.config_files))
 
     def action_show_proxy_config(self) -> None:
         """Show the proxy configuration screen."""
-        self.push_screen(ProxyConfigScreen(self.servers, self.proxy_config))
+        self.push_screen(ProxyConfigScreen(self.config_files, self.proxy_config))
 
     def action_show_logs(self) -> None:
         """Show the log viewer screen."""

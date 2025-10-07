@@ -6,6 +6,7 @@ from .resource import MCPResource
 from .prompt import MCPPrompt, PromptArgument
 from .log_entry import LogEntry, LogEntryType
 from .proxy_config import ProxyConfig
+from .config_file import ConfigFile
 
 __all__ = [
     "MCPServer",
@@ -19,4 +20,5 @@ __all__ = [
     "LogEntry",
     "LogEntryType",
     "ProxyConfig",
+    "ConfigFile",
 ]

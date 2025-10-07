@@ -81,11 +81,12 @@ class ProxyServer:
         """Set up MCP server request handlers."""
         # Create a proxy tool for each enabled server's tools
         for server in self.servers:
-            if not self.config.is_server_enabled(server.name):
+            config_file_path = server.source_file or ""
+            if not self.config.is_server_enabled(config_file_path, server.name):
                 continue
 
             for tool in server.tools:
-                if not self.config.is_tool_enabled(server.name, tool.name):
+                if not self.config.is_tool_enabled(config_file_path, server.name, tool.name):
                     continue
 
                 # Create a closure to capture server_name and tool_name
@@ -93,13 +94,13 @@ class ProxyServer:
 
             # Register resources
             for resource in server.resources:
-                if not self.config.is_resource_enabled(server.name, resource.uri):
+                if not self.config.is_resource_enabled(config_file_path, server.name, resource.uri):
                     continue
                 self._register_resource(server.name, resource)
 
             # Register prompts
             for prompt in server.prompts:
-                if not self.config.is_prompt_enabled(server.name, prompt.name):
+                if not self.config.is_prompt_enabled(config_file_path, server.name, prompt.name):
                     continue
                 self._register_prompt(server.name, prompt)
 
@@ -350,7 +351,7 @@ async def prompt_handler({param_str}) -> str:
         self.logger.set_log_file(log_file)
 
         # Count enabled servers
-        enabled_count = sum(1 for s in self.servers if self.config.is_server_enabled(s.name))
+        enabled_count = sum(1 for s in self.servers if self.config.is_server_enabled(s.source_file or "", s.name))
 
         # Log server start
         if self.config.enable_logging:
