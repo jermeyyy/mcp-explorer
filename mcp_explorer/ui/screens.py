@@ -102,8 +102,13 @@ class ServerListScreen(Screen):
 
             # Create and start new proxy server
             import asyncio
+            # Extract all servers from config files
+            all_servers = []
+            for config_file in self.config_files:
+                all_servers.extend(config_file.servers)
+
             self.app.proxy_server = ProxyServer(  # type: ignore
-                servers=self.servers,
+                servers=all_servers,
                 config=proxy_config,
                 logger=self.app.proxy_logger,  # type: ignore
             )

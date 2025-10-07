@@ -601,6 +601,139 @@ ListItem.log-entry-card:hover {
     background: #2a2a2a;
 }
 
+/* Tool Terminal Screen */
+#terminal-container {
+    height: 100%;
+    layout: vertical;
+    background: #1e1e1e;
+}
+
+#terminal-control-panel {
+    height: auto;
+    background: #252525;
+    border-bottom: solid #569cd6;
+    padding: 1 2;
+}
+
+.terminal-title {
+    color: #569cd6;
+    text-style: bold;
+    text-align: center;
+    padding: 0 0 1 0;
+}
+
+#terminal-selectors {
+    width: 100%;
+    height: 3;
+    align: left middle;
+}
+
+.terminal-select {
+    width: 1fr;
+    margin: 0 1 0 0;
+    background: #2d2d2d;
+}
+
+.terminal-error {
+    color: #f48771;
+    text-align: center;
+    padding: 1;
+}
+
+.tool-info {
+    color: #4ec9b0;
+    text-align: center;
+    padding: 1 0;
+    height: auto;
+}
+
+/* Chat Area */
+#chat-area {
+    height: 1fr;
+    background: #1e1e1e;
+    padding: 1;
+}
+
+.chat-message {
+    background: #252525;
+    border-left: solid #3e3e3e;
+    padding: 1;
+    margin: 0 0 1 0;
+    height: auto;
+}
+
+.chat-message-user {
+    border-left: solid #569cd6;
+}
+
+.chat-message-system {
+    border-left: solid #4ec9b0;
+}
+
+.chat-message-result {
+    border-left: solid #89d185;
+    background: #1a2a1a;
+}
+
+.chat-message-error {
+    border-left: solid #f48771;
+    background: #2a1a1a;
+}
+
+.message-timestamp {
+    color: #858585;
+    text-style: italic;
+}
+
+.message-sender {
+    color: #4ec9b0;
+    text-style: bold;
+    padding: 0 0 0 1;
+}
+
+.message-content {
+    color: #d4d4d4;
+    padding: 1 0 0 2;
+    height: auto;
+}
+
+/* Input Area */
+#terminal-input-area {
+    height: auto;
+    background: #252525;
+    border-top: solid #3e3e3e;
+    padding: 1 2;
+}
+
+.input-prompt-text {
+    color: #4ec9b0;
+    padding: 0 0 1 0;
+    height: auto;
+}
+
+#input-controls {
+    width: 100%;
+    height: 3;
+    align: left middle;
+}
+
+.terminal-input-field {
+    width: 1fr;
+    margin: 0 1 0 0;
+    background: #2d2d2d;
+    border: solid #3e3e3e;
+}
+
+.send-button {
+    width: 10;
+    margin: 0 1 0 0;
+}
+
+.execute-button {
+    width: 12;
+    margin: 0;
+}
+
 .log-entry-header {
     background: transparent;
     padding: 0 0 1 0;

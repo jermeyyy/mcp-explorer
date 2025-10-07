@@ -12,6 +12,7 @@ from ..services import MCPDiscoveryService
 from .screens import LoadingScreen, ServerListScreen, SplashScreen
 from .log_viewer_screen import LogViewerScreen
 from .proxy_config_screen import ProxyConfigScreen
+from .tool_terminal_screen import ToolTerminalScreen
 
 
 class MCPExplorerApp(App):
@@ -24,6 +25,7 @@ class MCPExplorerApp(App):
         ("q", "quit", "Quit"),
         ("r", "refresh_servers", "Refresh"),
         ("p", "show_proxy_config", "Proxy Config"),
+        ("t", "show_terminal", "Tool Terminal"),
         ("l", "show_logs", "View Logs"),
     ]
 
@@ -179,6 +181,20 @@ class MCPExplorerApp(App):
     def action_show_logs(self) -> None:
         """Show the log viewer screen."""
         self.push_screen(LogViewerScreen(self.proxy_logger))
+
+    def action_show_terminal(self) -> None:
+        """Show the tool terminal screen for testing server tools."""
+        # Check if proxy is running
+        if not self.proxy_config.enabled or not self.proxy_server or not self.proxy_server.is_running():
+            self.notify(
+                "Tool Terminal requires the proxy server to be running. Start the proxy first (press 'P').",
+                severity="warning",
+                timeout=5
+            )
+            return
+
+        self.push_screen(ToolTerminalScreen(self.servers, self.proxy_config))
+
 
     def action_quit(self) -> None:
         """Quit the application."""
