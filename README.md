@@ -7,7 +7,7 @@ A powerful TUI (Text User Interface) application for discovering, exploring, and
 ### Server Discovery & Exploration
 
 - **Automatic Discovery**: Finds all configured MCP servers from Claude Code and GitHub Copilot IntelliJ
-- **Server Type Support**: Handles both stdio and SSE server types
+- **Server Type Support**: Handles stdio, HTTP streaming, and SSE server types
 - **JSON5 Support**: Parses both strict JSON and JSON5 (unquoted keys, comments, trailing commas)
 - **Config Validation**: Validates configuration files with helpful error messages
 - **Server Overview**: Lists all servers with their status, type, and capabilities at a glance
@@ -107,10 +107,18 @@ Configuration format:
       },
       "description": "Optional description of the server"
     },
+    "my-http-server": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN"
+      },
+      "description": "HTTP streaming MCP server (FastMCP 2.0)"
+    },
     "my-sse-server": {
       "type": "sse",
       "url": "http://localhost:8080/sse",
-      "description": "SSE-based MCP server"
+      "description": "SSE-based MCP server (legacy)"
     }
   }
 }
@@ -118,7 +126,8 @@ Configuration format:
 
 **Supported Server Types:**
 - `stdio`: Launches a local process and communicates via stdin/stdout (default)
-- `sse`: Connects to a running server via Server-Sent Events (HTTP)
+- `http`: Connects to a network MCP server via HTTP streaming (FastMCP 2.0 - recommended for production)
+- `sse`: Connects to a running server via Server-Sent Events (legacy, backward compatibility)
 
 ## Architecture
 
@@ -153,7 +162,16 @@ mypy mcp_explorer
 
 Linting:
 
-```bash
+### v0.3.0 - HTTP Streaming Support (Latest)
+
+✅ **HTTP Streaming Servers**: Full support for HTTP streaming MCP servers using FastMCP 2.0
+✅ **StreamableHTTP Transport**: Uses the recommended `streamablehttp_client` for production deployments
+✅ **Authentication Headers**: Support for custom headers including Bearer tokens and API keys
+✅ **Network Accessibility**: Connect to remote MCP servers over HTTP
+✅ **Bidirectional Streaming**: Efficient real-time communication with HTTP servers
+✅ **Proxy Support**: HTTP backend servers fully supported in the MCP proxy
+
+### v0.2.0 - SSE Client Tracking
 ruff check mcp_explorer
 ```
 
@@ -166,6 +184,7 @@ ruff check mcp_explorer
 
 ✅ **SSE Client Tracking**: Log viewer now displays real-time count of connected SSE clients
 ✅ **Connection Event Logging**: Track individual client connections and disconnections with timestamps
+- **docs/HTTP_STREAMING_SUPPORT.md** - HTTP streaming server configuration and usage guide
 ✅ **Automatic Middleware**: Starlette middleware automatically tracks all SSE connections
 ✅ **Client Statistics**: View connected client count prominently in the stats bar
 

@@ -74,13 +74,32 @@ class MCPDiscoveryService:
                     server.mark_error("No command specified in configuration")
                     return server
 
-            elif server_type == ServerType.SSE:
+            elif server_type == ServerType.HTTP:
                 url = config.get("url", "")
+                headers = config.get("headers", {})
 
                 server = MCPServer(
                     name=name,
                     server_type=server_type,
                     url=url,
+                    headers=headers,
+                    description=description,
+                    source_file=source_file,
+                )
+
+                if not url:
+                    server.mark_error("No URL specified in configuration")
+                    return server
+
+            elif server_type == ServerType.SSE:
+                url = config.get("url", "")
+                headers = config.get("headers", {})
+
+                server = MCPServer(
+                    name=name,
+                    server_type=server_type,
+                    url=url,
+                    headers=headers,
                     description=description,
                     source_file=source_file,
                 )

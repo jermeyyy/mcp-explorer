@@ -14,6 +14,13 @@ try:
 except ImportError:
     SSE_AVAILABLE = False
 
+try:
+    from mcp.client.streamable_http import streamablehttp_client
+
+    HTTP_AVAILABLE = True
+except ImportError:
+    HTTP_AVAILABLE = False
+
 from ..models import MCPPrompt, MCPResource, MCPServer, MCPTool, ServerType
 
 
@@ -47,13 +54,31 @@ class MCPClientService:
 
     @asynccontextmanager
     async def connect_to_sse_server(
-        self, server_name: str, url: str
+        self, server_name: str, url: str, headers: Optional[Dict[str, str]] = None
     ) -> AsyncIterator[ClientSession]:
         """Connect to an SSE MCP server and yield the session."""
         if not SSE_AVAILABLE:
             raise RuntimeError("SSE client not available. Install mcp with SSE support.")
 
-        async with sse_client(url) as (read, write):
+        async with sse_client(url, headers=headers or {}) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                self._active_sessions[server_name] = session
+                try:
+                    yield session
+                finally:
+                    if server_name in self._active_sessions:
+                        del self._active_sessions[server_name]
+
+    @asynccontextmanager
+    async def connect_to_http_server(
+        self, server_name: str, url: str, headers: Optional[Dict[str, str]] = None
+    ) -> AsyncIterator[ClientSession]:
+        """Connect to an HTTP streaming MCP server and yield the session."""
+        if not HTTP_AVAILABLE:
+            raise RuntimeError("HTTP client not available. Install mcp with HTTP support.")
+
+        async with streamablehttp_client(url, headers=headers or {}) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 self._active_sessions[server_name] = session
@@ -75,12 +100,18 @@ class MCPClientService:
                 context = self.connect_to_stdio_server(
                     server.name, server.command, server.args, server.env
                 )
+            elif server.server_type == ServerType.HTTP:
+                if not server.url:
+                    server.mark_error("No URL specified for HTTP server")
+                    return server
+
+                context = self.connect_to_http_server(server.name, server.url, server.headers)
             elif server.server_type == ServerType.SSE:
                 if not server.url:
                     server.mark_error("No URL specified for SSE server")
                     return server
 
-                context = self.connect_to_sse_server(server.name, server.url)
+                context = self.connect_to_sse_server(server.name, server.url, server.headers)
             else:
                 server.mark_error(f"Unknown server type: {server.server_type}")
                 return server
@@ -178,11 +209,16 @@ class MCPClientService:
             context = self.connect_to_stdio_server(
                 server.name, server.command, server.args, server.env
             )
+        elif server.server_type == ServerType.HTTP:
+            if not server.url:
+                raise ValueError("No URL specified for HTTP server")
+
+            context = self.connect_to_http_server(server.name, server.url, server.headers)
         elif server.server_type == ServerType.SSE:
             if not server.url:
                 raise ValueError("No URL specified for SSE server")
 
-            context = self.connect_to_sse_server(server.name, server.url)
+            context = self.connect_to_sse_server(server.name, server.url, server.headers)
         else:
             raise ValueError(f"Unknown server type: {server.server_type}")
 
@@ -206,11 +242,16 @@ class MCPClientService:
                 context = self.connect_to_stdio_server(
                     server.name, server.command, server.args, server.env
                 )
+            elif server.server_type == ServerType.HTTP:
+                if not server.url:
+                    return "Error: No URL specified for HTTP server"
+
+                context = self.connect_to_http_server(server.name, server.url, server.headers)
             elif server.server_type == ServerType.SSE:
                 if not server.url:
                     return "Error: No URL specified for SSE server"
 
-                context = self.connect_to_sse_server(server.name, server.url)
+                context = self.connect_to_sse_server(server.name, server.url, server.headers)
             else:
                 return f"Error: Unknown server type: {server.server_type}"
 
@@ -244,3 +285,4 @@ class MCPClientService:
     def cleanup(self) -> None:
         """Cleanup any active sessions."""
         self._active_sessions.clear()
+

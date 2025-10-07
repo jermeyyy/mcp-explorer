@@ -127,7 +127,7 @@ class MCPConfigLoader:
         """
         # Check server type
         server_type = config.get("type", "stdio")
-        if server_type not in ["stdio", "sse"]:
+        if server_type not in ["stdio", "http", "sse"]:
             return False, f"Invalid server type: {server_type}"
 
         if server_type == "stdio":
@@ -141,10 +141,21 @@ class MCPConfigLoader:
             if "env" in config and not isinstance(config["env"], dict):
                 return False, "'env' must be an object"
 
+        elif server_type == "http":
+            # Validate HTTP server
+            if "url" not in config:
+                return False, "http server must have 'url' field"
+
+            if "headers" in config and not isinstance(config["headers"], dict):
+                return False, "'headers' must be an object"
+
         elif server_type == "sse":
             # Validate sse server
             if "url" not in config:
                 return False, "sse server must have 'url' field"
+
+            if "headers" in config and not isinstance(config["headers"], dict):
+                return False, "'headers' must be an object"
 
         return True, None
 

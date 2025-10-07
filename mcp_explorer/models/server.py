@@ -14,6 +14,7 @@ class ServerType(str, Enum):
     """Enumeration of server types."""
 
     STDIO = "stdio"
+    HTTP = "http"
     SSE = "sse"
 
 
@@ -36,8 +37,9 @@ class MCPServer(BaseModel):
     args: list[str] = Field(default_factory=list)
     env: dict[str, str] = Field(default_factory=dict)
 
-    # For SSE servers
+    # For HTTP and SSE servers
     url: Optional[str] = None
+    headers: dict[str, str] = Field(default_factory=dict)
 
     # Status and metadata
     status: ServerStatus = ServerStatus.DISCONNECTED
