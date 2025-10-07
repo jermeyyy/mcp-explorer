@@ -1,165 +1,126 @@
 """MCP Client service for connecting to and querying MCP servers."""
 
-import asyncio
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-
-try:
-    from mcp.client.sse import sse_client
-
-    SSE_AVAILABLE = True
-except ImportError:
-    SSE_AVAILABLE = False
-
-try:
-    from mcp.client.streamable_http import streamablehttp_client
-
-    HTTP_AVAILABLE = True
-except ImportError:
-    HTTP_AVAILABLE = False
+from fastmcp import Client
+from fastmcp.client.transports import SSETransport, StdioTransport, StreamableHttpTransport
 
 from ..models import MCPPrompt, MCPResource, MCPServer, MCPTool, ServerType
 
 
 class MCPClientService:
-    """Service for interacting with MCP servers."""
+    """Service for interacting with MCP servers using fastmcp 2.0."""
 
     def __init__(self) -> None:
         """Initialize the MCP client service."""
-        self._active_sessions: Dict[str, ClientSession] = {}
+        self._active_clients: Dict[str, Client] = {}
+
+    def _create_client(self, server: MCPServer) -> Client:
+        """Create a fastmcp Client based on server configuration.
+
+        Args:
+            server: MCP server configuration
+
+        Returns:
+            Configured fastmcp Client instance
+
+        Raises:
+            ValueError: If server configuration is invalid
+        """
+        if server.server_type == ServerType.STDIO:
+            if not server.command:
+                raise ValueError("No command specified for stdio server")
+
+            transport = StdioTransport(
+                command=server.command,
+                args=server.args,
+                env=server.env or {},
+            )
+            return Client(transport)
+
+        elif server.server_type == ServerType.HTTP:
+            if not server.url:
+                raise ValueError("No URL specified for HTTP server")
+
+            transport = StreamableHttpTransport(
+                url=server.url,
+                headers=server.headers or {},
+            )
+            return Client(transport)
+
+        elif server.server_type == ServerType.SSE:
+            if not server.url:
+                raise ValueError("No URL specified for SSE server")
+
+            transport = SSETransport(
+                url=server.url,
+                headers=server.headers or {},
+            )
+            return Client(transport)
+
+        else:
+            raise ValueError(f"Unknown server type: {server.server_type}")
 
     @asynccontextmanager
-    async def connect_to_stdio_server(
-        self, server_name: str, command: str, args: List[str], env: Optional[Dict[str, str]] = None
-    ) -> AsyncIterator[ClientSession]:
-        """Connect to a stdio MCP server and yield the session."""
-        server_params = StdioServerParameters(
-            command=command,
-            args=args,
-            env=env or {},
-        )
+    async def connect_to_server(self, server: MCPServer) -> AsyncIterator[Client]:
+        """Connect to an MCP server and yield the client.
 
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                self._active_sessions[server_name] = session
-                try:
-                    yield session
-                finally:
-                    if server_name in self._active_sessions:
-                        del self._active_sessions[server_name]
+        Args:
+            server: MCP server to connect to
 
-    @asynccontextmanager
-    async def connect_to_sse_server(
-        self, server_name: str, url: str, headers: Optional[Dict[str, str]] = None
-    ) -> AsyncIterator[ClientSession]:
-        """Connect to an SSE MCP server and yield the session."""
-        if not SSE_AVAILABLE:
-            raise RuntimeError("SSE client not available. Install mcp with SSE support.")
+        Yields:
+            Connected fastmcp Client instance
+        """
+        client = self._create_client(server)
+        self._active_clients[server.name] = client
 
-        async with sse_client(url, headers=headers or {}) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                self._active_sessions[server_name] = session
-                try:
-                    yield session
-                finally:
-                    if server_name in self._active_sessions:
-                        del self._active_sessions[server_name]
-
-    @asynccontextmanager
-    async def connect_to_http_server(
-        self, server_name: str, url: str, headers: Optional[Dict[str, str]] = None
-    ) -> AsyncIterator[ClientSession]:
-        """Connect to an HTTP streaming MCP server and yield the session."""
-        if not HTTP_AVAILABLE:
-            raise RuntimeError("HTTP client not available. Install mcp with HTTP support.")
-
-        async with streamablehttp_client(url, headers=headers or {}) as (read, write, _):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                self._active_sessions[server_name] = session
-                try:
-                    yield session
-                finally:
-                    if server_name in self._active_sessions:
-                        del self._active_sessions[server_name]
+        try:
+            async with client:
+                yield client
+        finally:
+            if server.name in self._active_clients:
+                del self._active_clients[server.name]
 
     async def query_server_capabilities(self, server: MCPServer) -> MCPServer:
-        """Query a server for its complete capabilities."""
+        """Query a server for its complete capabilities.
+
+        Args:
+            server: MCP server to query
+
+        Returns:
+            Updated server with capabilities populated
+        """
         try:
-            # Connect based on server type
-            if server.server_type == ServerType.STDIO:
-                if not server.command:
-                    server.mark_error("No command specified for stdio server")
-                    return server
-
-                context = self.connect_to_stdio_server(
-                    server.name, server.command, server.args, server.env
-                )
-            elif server.server_type == ServerType.HTTP:
-                if not server.url:
-                    server.mark_error("No URL specified for HTTP server")
-                    return server
-
-                context = self.connect_to_http_server(server.name, server.url, server.headers)
-            elif server.server_type == ServerType.SSE:
-                if not server.url:
-                    server.mark_error("No URL specified for SSE server")
-                    return server
-
-                context = self.connect_to_sse_server(server.name, server.url, server.headers)
-            else:
-                server.mark_error(f"Unknown server type: {server.server_type}")
-                return server
-
-            async with context as session:
-                # Get server info - check for the correct attribute
-                server_info = {}
-                if hasattr(session, "server_capabilities"):
-                    # Newer MCP API
-                    caps = session.server_capabilities
-                    if caps and hasattr(caps, "serverInfo"):
-                        server_info = {
-                            "name": getattr(caps.serverInfo, "name", ""),
-                            "version": getattr(caps.serverInfo, "version", ""),
-                        }
-                elif hasattr(session, "_server_info"):
-                    # Alternative attribute name
-                    info = session._server_info
-                    if info:
-                        server_info = {
-                            "name": info.get("name", ""),
-                            "version": info.get("version", ""),
-                        }
-
-                if server_info:
-                    server.server_info = server_info
+            async with self.connect_to_server(server) as client:
+                # Get server info from client
+                if hasattr(client, "server_name") and hasattr(client, "server_version"):
+                    server.server_info = {
+                        "name": client.server_name or "",
+                        "version": client.server_version or "",
+                    }
 
                 # Query tools
                 try:
-                    tools_result = await session.list_tools()
-                    server.tools = [MCPTool.from_mcp_tool(tool) for tool in tools_result.tools]
+                    tools_result = await client.list_tools()
+                    server.tools = [MCPTool.from_mcp_tool(tool) for tool in tools_result]
                 except Exception as e:
                     print(f"Error fetching tools from {server.name}: {e}")
 
                 # Query resources
                 try:
-                    resources_result = await session.list_resources()
+                    resources_result = await client.list_resources()
                     server.resources = [
-                        MCPResource.from_mcp_resource(res) for res in resources_result.resources
+                        MCPResource.from_mcp_resource(res) for res in resources_result
                     ]
                 except Exception as e:
                     print(f"Error fetching resources from {server.name}: {e}")
 
                 # Query prompts
                 try:
-                    prompts_result = await session.list_prompts()
+                    prompts_result = await client.list_prompts()
                     server.prompts = [
-                        MCPPrompt.from_mcp_prompt(prompt) for prompt in prompts_result.prompts
+                        MCPPrompt.from_mcp_prompt(prompt) for prompt in prompts_result
                     ]
                 except Exception as e:
                     print(f"Error fetching prompts from {server.name}: {e}")
@@ -201,29 +162,8 @@ class MCPClientService:
         Raises:
             Exception: If tool execution fails
         """
-        # Connect based on server type
-        if server.server_type == ServerType.STDIO:
-            if not server.command:
-                raise ValueError("No command specified for stdio server")
-
-            context = self.connect_to_stdio_server(
-                server.name, server.command, server.args, server.env
-            )
-        elif server.server_type == ServerType.HTTP:
-            if not server.url:
-                raise ValueError("No URL specified for HTTP server")
-
-            context = self.connect_to_http_server(server.name, server.url, server.headers)
-        elif server.server_type == ServerType.SSE:
-            if not server.url:
-                raise ValueError("No URL specified for SSE server")
-
-            context = self.connect_to_sse_server(server.name, server.url, server.headers)
-        else:
-            raise ValueError(f"Unknown server type: {server.server_type}")
-
-        async with context as session:
-            result = await session.call_tool(tool_name, arguments=tool_args or {})
+        async with self.connect_to_server(server) as client:
+            result = await client.call_tool(tool_name, tool_args or {})
             return result
 
     async def get_prompt_preview(
@@ -232,31 +172,19 @@ class MCPClientService:
         prompt_name: str,
         prompt_args: Optional[Dict[str, str]] = None,
     ) -> str:
-        """Get a preview of a prompt with given arguments."""
+        """Get a preview of a prompt with given arguments.
+
+        Args:
+            server: MCP server to query
+            prompt_name: Name of the prompt to preview
+            prompt_args: Arguments to pass to the prompt
+
+        Returns:
+            Formatted prompt preview string
+        """
         try:
-            # Connect based on server type
-            if server.server_type == ServerType.STDIO:
-                if not server.command:
-                    return "Error: No command specified for stdio server"
-
-                context = self.connect_to_stdio_server(
-                    server.name, server.command, server.args, server.env
-                )
-            elif server.server_type == ServerType.HTTP:
-                if not server.url:
-                    return "Error: No URL specified for HTTP server"
-
-                context = self.connect_to_http_server(server.name, server.url, server.headers)
-            elif server.server_type == ServerType.SSE:
-                if not server.url:
-                    return "Error: No URL specified for SSE server"
-
-                context = self.connect_to_sse_server(server.name, server.url, server.headers)
-            else:
-                return f"Error: Unknown server type: {server.server_type}"
-
-            async with context as session:
-                result = await session.get_prompt(prompt_name, arguments=prompt_args or {})
+            async with self.connect_to_server(server) as client:
+                result = await client.get_prompt(prompt_name, prompt_args or {})
 
                 # Format the preview
                 preview_parts = []
@@ -283,6 +211,5 @@ class MCPClientService:
             return f"Error previewing prompt: {e}"
 
     def cleanup(self) -> None:
-        """Cleanup any active sessions."""
-        self._active_sessions.clear()
-
+        """Cleanup any active clients."""
+        self._active_clients.clear()
