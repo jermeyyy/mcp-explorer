@@ -59,16 +59,25 @@ class ServerListScreen(Screen):
                 if proxy_config.enabled:
                     yield Static("● RUNNING", classes="proxy-bar-status proxy-bar-running")
                     yield Static(f"Port: {proxy_config.port}", classes="proxy-bar-port")
-                    yield Button("⏹ Stop", id="proxy-toggle-btn", variant="error", classes="proxy-bar-button")
+                    yield Button(
+                        "⏹ Stop", id="proxy-toggle-btn", variant="error", classes="proxy-bar-button"
+                    )
                 else:
                     yield Static("○ STOPPED", classes="proxy-bar-status proxy-bar-stopped")
                     yield Static(f"Port: {proxy_config.port}", classes="proxy-bar-port")
-                    yield Button("▶ Start", id="proxy-toggle-btn", variant="success", classes="proxy-bar-button")
+                    yield Button(
+                        "▶ Start",
+                        id="proxy-toggle-btn",
+                        variant="success",
+                        classes="proxy-bar-button",
+                    )
 
             # Content area - scrollable
             if not self.config_files:
                 yield Container(
-                    Static("No MCP servers found. Check your configuration.", classes="empty-state"),
+                    Static(
+                        "No MCP servers found. Check your configuration.", classes="empty-state"
+                    ),
                     id="empty-state",
                 )
             else:
@@ -102,6 +111,7 @@ class ServerListScreen(Screen):
 
             # Create and start new proxy server
             import asyncio
+
             # Extract all servers from config files
             all_servers = []
             for config_file in self.config_files:
@@ -125,7 +135,6 @@ class ServerListScreen(Screen):
 
         # Update subtitle and refresh screen
         self.app.update_subtitle()  # type: ignore
-        self.refresh()
 
         # Refresh the control bar to show updated status
         await self.recompose()
@@ -183,7 +192,9 @@ class ServerDetailScreen(Screen):
 
                     # Show error if present
                     if self.server.error_message:
-                        yield Static(f"Error: {self.server.error_message}", classes="server-status-error")
+                        yield Static(
+                            f"Error: {self.server.error_message}", classes="server-status-error"
+                        )
 
                 # Type Section
                 yield Static("TYPE", classes="info-section-header")
@@ -199,7 +210,7 @@ class ServerDetailScreen(Screen):
                             yield Static(self.server.command, classes="info-value-mono")
                             if self.server.args:
                                 yield Static("Arguments", classes="info-label")
-                                yield Static(' '.join(self.server.args), classes="info-value-mono")
+                                yield Static(" ".join(self.server.args), classes="info-value-mono")
                         if self.server.url:
                             yield Static("URL", classes="info-label")
                             yield Static(self.server.url, classes="info-value-mono")
@@ -304,7 +315,7 @@ class ToolDetailScreen(Screen):
                         # Parameter name with requirement badge
                         yield Static(
                             f"• {param.name} {requirement_badge}",
-                            classes=f"param-name {requirement_class}"
+                            classes=f"param-name {requirement_class}",
                         )
 
                         # Type
@@ -320,8 +331,11 @@ class ToolDetailScreen(Screen):
             if self.tool.input_schema:
                 yield Static("INPUT SCHEMA", classes="detail-section-header")
                 import json
+
                 # Pretty-print JSON with 2-space indentation and sorted keys for readability
-                schema_text = json.dumps(self.tool.input_schema, indent=2, sort_keys=True, ensure_ascii=False)
+                schema_text = json.dumps(
+                    self.tool.input_schema, indent=2, sort_keys=True, ensure_ascii=False
+                )
                 yield Static(schema_text, classes="detail-section-json")
 
 
@@ -482,7 +496,9 @@ class SplashScreen(Screen):
             yield Static("", id="splash-spacer")
             yield Static("⠋ Initializing...", id="splash-status")
             with Container(id="splash-progress-container"):
-                yield ProgressBar(total=100, show_eta=False, show_percentage=False, id="splash-progress")
+                yield ProgressBar(
+                    total=100, show_eta=False, show_percentage=False, id="splash-progress"
+                )
                 yield Static("0%", id="splash-progress-percent")
 
     def on_mount(self) -> None:

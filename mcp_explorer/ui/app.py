@@ -29,8 +29,12 @@ class MCPExplorerApp(App):
         ("l", "show_logs", "View Logs"),
     ]
 
-    def __init__(self) -> None:
-        """Initialize the MCP Explorer app."""
+    def __init__(self, start_proxy: bool = False) -> None:
+        """Initialize the MCP Explorer app.
+
+        Args:
+            start_proxy: Whether to start the proxy server automatically on startup
+        """
         super().__init__()
         self.discovery_service = MCPDiscoveryService()
         self.config_files: List[ConfigFile] = []
@@ -38,10 +42,11 @@ class MCPExplorerApp(App):
 
         # Proxy components - load config from file
         self.proxy_config = ProxyConfig.load()
-        # Always start with proxy disabled - user must explicitly start it
-        self.proxy_config.enabled = False
+        # Start with proxy disabled by default unless --proxy flag is passed
+        self.proxy_config.enabled = start_proxy
         self.proxy_logger = ProxyLogger()
         self.proxy_server: Optional[ProxyServer] = None
+        self._start_proxy_on_init = start_proxy
 
         # Set initial subtitle
         self.update_subtitle()
@@ -94,6 +99,11 @@ class MCPExplorerApp(App):
 
         # Pop splash screen and show server list
         await self.pop_screen()
+
+        # Start proxy if requested via CLI flag
+        if self._start_proxy_on_init and self.servers:
+            await self._start_proxy_server()
+
         await self.push_screen(ServerListScreen(self.config_files))
 
     async def _discover_with_progress(self, splash: SplashScreen) -> None:
@@ -115,7 +125,7 @@ class MCPExplorerApp(App):
         if total_servers > 0:
             splash.update_status(
                 f"Initialized {total_servers} server{'s' if total_servers != 1 else ''} from {len(self.config_files)} config file{'s' if len(self.config_files) != 1 else ''}",
-                75
+                75,
             )
         else:
             splash.update_status("No servers found", 75)
@@ -136,6 +146,36 @@ class MCPExplorerApp(App):
             # Initialize with empty lists if discovery fails completely
             self.config_files = []
             self.servers = []
+
+    async def _start_proxy_server(self) -> None:
+        """Start the proxy server."""
+        # Stop any existing proxy server first
+        if self.proxy_server and self.proxy_server.is_running():
+            await self.proxy_server.stop()
+            self.proxy_server = None
+
+        # Create and start new proxy server
+        self.proxy_server = ProxyServer(
+            servers=self.servers,
+            config=self.proxy_config,
+            logger=self.proxy_logger,
+        )
+
+        # Start server in background task
+        asyncio.create_task(self.proxy_server.start())
+
+        # Mark as enabled
+        self.proxy_config.enabled = True
+
+        # Update subtitle
+        self.update_subtitle()
+
+        # Notify user
+        self.notify(
+            f"Proxy server started on port {self.proxy_config.port}",
+            severity="information",
+            timeout=3,
+        )
 
     async def action_refresh_servers(self) -> None:
         """Refresh the server list."""
@@ -185,16 +225,19 @@ class MCPExplorerApp(App):
     def action_show_terminal(self) -> None:
         """Show the tool terminal screen for testing server tools."""
         # Check if proxy is running
-        if not self.proxy_config.enabled or not self.proxy_server or not self.proxy_server.is_running():
+        if (
+            not self.proxy_config.enabled
+            or not self.proxy_server
+            or not self.proxy_server.is_running()
+        ):
             self.notify(
                 "Tool Terminal requires the proxy server to be running. Start the proxy first (press 'P').",
                 severity="warning",
-                timeout=5
+                timeout=5,
             )
             return
 
         self.push_screen(ToolTerminalScreen(self.servers, self.proxy_config))
-
 
     def action_quit(self) -> None:
         """Quit the application."""
