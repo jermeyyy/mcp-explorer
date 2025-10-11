@@ -4,7 +4,7 @@ import json
 from typing import Optional
 
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Horizontal
 from textual.widgets import Button, Input, Label, ListItem, Static
 
 from ..models import LogEntry
@@ -76,7 +76,7 @@ class LogEntryWidget(ListItem):
                         if self.entry.parameters:
                             yield Static("Parameters", classes="log-detail-label")
                             params_json = json.dumps(self.entry.parameters, indent=2)
-                            yield Static(params_json, classes="log-detail-json")
+                            yield Static(self._highlight_search_term(params_json), classes="log-detail-json")
 
                         # Response
                         if self.entry.response is not None:
@@ -85,12 +85,51 @@ class LogEntryWidget(ListItem):
                                 response_json = json.dumps(self.entry.response, indent=2)
                             else:
                                 response_json = str(self.entry.response)
-                            yield Static(response_json, classes="log-detail-json")
+                            yield Static(self._highlight_search_term(response_json), classes="log-detail-json")
 
                         # Error
                         if self.entry.error:
                             yield Static("Error", classes="log-detail-label log-error-label")
-                            yield Static(self.entry.error, classes="log-error-content")
+                            yield Static(self._highlight_search_term(self.entry.error), classes="log-error-content")
+
+    def _highlight_search_term(self, text: str) -> str:
+        """Highlight search term in text using markup.
+
+        Args:
+            text: Text to highlight search term in
+
+        Returns:
+            Text with search term highlighted
+        """
+        if not self.search_query or not text:
+            return text
+        
+        # Case-insensitive search and highlight
+        lower_text = text.lower()
+        lower_query = self.search_query.lower()
+        
+        if lower_query in lower_text:
+            # Find all occurrences and wrap them in markup
+            result = []
+            last_end = 0
+            
+            while True:
+                start = lower_text.find(lower_query, last_end)
+                if start == -1:
+                    break
+                
+                # Add text before match
+                result.append(text[last_end:start])
+                # Add highlighted match
+                end = start + len(lower_query)
+                result.append(f"[bold yellow on blue]{text[start:end]}[/]")
+                last_end = end
+            
+            # Add remaining text
+            result.append(text[last_end:])
+            return "".join(result)
+        
+        return text
 
     def _get_content_preview(self) -> str:
         """Get a preview of the log content.
@@ -102,8 +141,10 @@ class LogEntryWidget(ListItem):
         if self.entry.error:
             error_lines = self.entry.error.split("\n")
             if len(error_lines) > 1:
-                return f"❌ Error: {error_lines[0][:100]}..."
-            return f"❌ Error: {self.entry.error[:100]}"
+                preview = f"❌ Error: {error_lines[0][:100]}..."
+            else:
+                preview = f"❌ Error: {self.entry.error[:100]}"
+            return self._highlight_search_term(preview)
 
         # For successful operations, show response preview
         if self.entry.response is not None:
@@ -111,22 +152,23 @@ class LogEntryWidget(ListItem):
                 lines = self.entry.response.split("\n")
                 preview = "\n".join(lines[: self.MAX_PREVIEW_LINES])
                 if len(lines) > self.MAX_PREVIEW_LINES or len(preview) > self.MAX_PREVIEW_CHARS:
-                    return preview[: self.MAX_PREVIEW_CHARS] + "..."
-                return preview
+                    preview = preview[: self.MAX_PREVIEW_CHARS] + "..."
+                return self._highlight_search_term(preview)
             elif isinstance(self.entry.response, (dict, list)):
                 response_json = json.dumps(self.entry.response, indent=2)
                 lines = response_json.split("\n")
                 preview = "\n".join(lines[: self.MAX_PREVIEW_LINES])
                 if len(lines) > self.MAX_PREVIEW_LINES:
-                    return preview + "\n..."
-                return preview
+                    preview = preview + "\n..."
+                return self._highlight_search_term(preview)
 
         # For pending or operations with parameters
         if self.entry.parameters:
             params_str = ", ".join(f"{k}={v}" for k, v in list(self.entry.parameters.items())[:3])
             if len(self.entry.parameters) > 3:
                 params_str += ", ..."
-            return f"⏳ {params_str}"
+            preview = f"⏳ {params_str}"
+            return self._highlight_search_term(preview)
 
         return ""
 

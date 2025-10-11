@@ -520,12 +520,15 @@ Vertical, Horizontal {
     background: #252525;
     padding: 1;
     border-bottom: solid #3e3e3e;
-    height: 3;
+    height: auto;
+    min-height: 3;
+    dock: top;
 }
 
 #search-input {
     width: 1fr;
     margin: 0 1 0 0;
+    border: tall $primary;
 }
 
 .search-nav-btn {
