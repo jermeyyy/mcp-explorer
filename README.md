@@ -1,5 +1,7 @@
 # MCP Explorer
 
+![image](art/main.png)
+
 A powerful TUI (Text User Interface) application for discovering, exploring, and proxying local MCP (Model Context Protocol) servers.
 
 ## Features
@@ -17,7 +19,7 @@ A powerful TUI (Text User Interface) application for discovering, exploring, and
   - Explore prompt templates with arguments
   - Preview prompt outputs in real-time
 
-### MCP Proxy Server ⭐ NEW
+### MCP Proxy Server
 
 - **Server Aggregation**: Combine multiple MCP servers into a single proxy endpoint
 - **Port Configuration**: Choose which port the proxy runs on (default: 3000)
@@ -172,15 +174,6 @@ Linting:
 ✅ **Proxy Support**: HTTP backend servers fully supported in the MCP proxy
 
 ### v0.2.0 - SSE Client Tracking
-ruff check mcp_explorer
-```
-
-## Requirements
-
-- Python 3.11 or higher
-## Recent Updates
-
-### v0.2.0 - SSE Client Tracking (Latest)
 
 ✅ **SSE Client Tracking**: Log viewer now displays real-time count of connected SSE clients
 ✅ **Connection Event Logging**: Track individual client connections and disconnections with timestamps
@@ -190,23 +183,14 @@ ruff check mcp_explorer
 
 ### v0.1.0 - Initial Release
 
-### v0.1.0 - Latest Updates
-
 ✅ **Fixed ESC Navigation**: ESC key now works correctly in all detail screens
 ✅ **Fixed Resource Discovery**: Server capabilities (tools, resources, prompts) now discovered without errors
 ✅ **JSON5 Support**: Handles GitHub Copilot IntelliJ configs with unquoted keys
 ✅ **Multi-format Support**: Works with both Claude Code and GitHub Copilot configs
 
-See `BUGFIXES.md` for details.
 
 ## Documentation
 
 - **QUICKSTART.md** - Quick start guide with examples
 - **PROXY_USAGE_GUIDE.md** - Complete guide to using the MCP Proxy feature
-- **MCP_PROXY_STATUS.md** - Technical implementation details and status
-- **CLAUDE.md** - Instructions for AI assistants using Serena MCP
 - **docs/CONFIG_FORMATS.md** - Configuration format reference
-
-## License
-
-MIT
