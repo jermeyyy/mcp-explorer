@@ -41,6 +41,7 @@ class LogViewerScreen(Screen):
         self.filters_visible = True
         self.auto_refresh = True
         self.last_entry_count = 0
+        self.active_filter_id = "filter-all"  # Track which filter button is active
 
     def compose(self) -> ComposeResult:
         """Compose the log viewer screen."""
@@ -64,32 +65,31 @@ class LogViewerScreen(Screen):
                     # Log entries
                     yield ListView(id="log-list", classes="log-list")
 
-                # Filter sidebar (collapsible)
-                if self.filters_visible:
-                    with VerticalScroll(id="filter-sidebar"):
-                        yield Label("FILTERS", classes="filter-sidebar-title")
+                # Filter sidebar (always composed, but can be hidden)
+                with VerticalScroll(id="filter-sidebar"):
+                    yield Label("FILTERS", classes="filter-sidebar-title")
 
-                        # Type filters
-                        yield Label("Type", classes="filter-section-label")
-                        yield Button(
-                            "All", id="filter-all", variant="primary", classes="filter-btn"
-                        )
-                        yield Button("Tools", id="filter-tools", classes="filter-btn")
-                        yield Button("Resources", id="filter-resources", classes="filter-btn")
-                        yield Button("Prompts", id="filter-prompts", classes="filter-btn")
+                    # Type filters
+                    yield Label("Type", classes="filter-section-label")
+                    yield Button(
+                        "All", id="filter-all", variant="primary", classes="filter-btn"
+                    )
+                    yield Button("Tools", id="filter-tools", classes="filter-btn")
+                    yield Button("Resources", id="filter-resources", classes="filter-btn")
+                    yield Button("Prompts", id="filter-prompts", classes="filter-btn")
 
-                        # Server status filters
-                        yield Label("Server Status", classes="filter-section-label")
-                        yield Button("Server Events", id="filter-server", classes="filter-btn")
-                        yield Button("Client Events", id="filter-client", classes="filter-btn")
-                        yield Button("Errors Only", id="filter-errors", classes="filter-btn")
+                    # Server status filters
+                    yield Label("Server Status", classes="filter-section-label")
+                    yield Button("Server Events", id="filter-server", classes="filter-btn")
+                    yield Button("Client Events", id="filter-client", classes="filter-btn")
+                    yield Button("Errors Only", id="filter-errors", classes="filter-btn")
 
-                        # Actions
-                        yield Label("Actions", classes="filter-section-label")
-                        yield Button(
-                            "Clear Logs", id="clear-logs", variant="error", classes="filter-btn"
-                        )
-                        yield Button("Hide Filters", id="toggle-filters", classes="filter-btn")
+                    # Actions
+                    yield Label("Actions", classes="filter-section-label")
+                    yield Button(
+                        "Clear Logs", id="clear-logs", variant="error", classes="filter-btn"
+                    )
+                    yield Button("Hide Filters", id="toggle-filters", classes="filter-btn")
 
     def on_mount(self) -> None:
         """Initialize the screen when mounted."""
@@ -277,8 +277,8 @@ class LogViewerScreen(Screen):
         Args:
             filter_id: ID of the filter button to activate
         """
-        if not self.filters_visible:
-            return
+        # Save the active filter ID
+        self.active_filter_id = filter_id
 
         # Reset all buttons
         for button_id in [
@@ -294,7 +294,7 @@ class LogViewerScreen(Screen):
                 button = self.query_one(f"#{button_id}", Button)
                 button.variant = "default" if button_id != filter_id else "primary"
             except:
-                pass  # Button might not exist if filters are hidden  # Button might not exist if filters are hidden
+                pass  # Handle case where button might not exist yet
 
     @on(Button.Pressed, "#clear-logs")
     def clear_logs(self) -> None:
@@ -346,13 +346,16 @@ class LogViewerScreen(Screen):
     def action_toggle_filters(self) -> None:
         """Toggle filter sidebar visibility."""
         self.filters_visible = not self.filters_visible
+        # Toggle visibility using CSS display property
+        sidebar = self.query_one("#filter-sidebar", VerticalScroll)
+        sidebar.display = self.filters_visible
+        
         # Update the toggle button text
-        if self.filters_visible:
-            # Refresh to show sidebar
-            self.refresh(recompose=True)
-        else:
-            # Hide sidebar
-            self.refresh(recompose=True)
+        try:
+            toggle_btn = self.query_one("#toggle-filters", Button)
+            toggle_btn.label = "Hide Filters" if self.filters_visible else "Show Filters"
+        except:
+            pass  # Button might not exist
 
     @on(Button.Pressed, "#toggle-filters")
     def handle_toggle_filters(self) -> None:
