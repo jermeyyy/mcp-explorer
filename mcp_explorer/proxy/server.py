@@ -4,9 +4,10 @@ import asyncio
 import time
 import uuid
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+from fastmcp.client.elicitation import ElicitResult
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -51,9 +52,9 @@ class ProxyServer:
 
     def __init__(
         self,
-        servers: List[MCPServer],
+        servers: list[MCPServer],
         config: ProxyConfig,
-        logger: Optional[ProxyLogger] = None,
+        logger: ProxyLogger | None = None,
     ) -> None:
         """Initialize the proxy server.
 
@@ -67,8 +68,8 @@ class ProxyServer:
         self.logger = logger or ProxyLogger(max_entries=config.max_log_entries)
         self.client_service = MCPClientService()
         self._running = False
-        self._server_task: Optional[asyncio.Task] = None
-        self._uvicorn_server: Optional[Any] = None
+        self._server_task: asyncio.Task | None = None
+        self._uvicorn_server: Any | None = None
         self._connected_clients: set[str] = set()
 
         # Initialize FastMCP server
@@ -105,9 +106,14 @@ class ProxyServer:
                 self._register_prompt(server.name, prompt)
 
     def _create_tool_handler(self, server_name: str, tool_name: str):
-        """Create a tool handler closure for a specific server and tool."""
+        """Create a tool handler closure for a specific server and tool.
 
-        async def handler(kwargs: dict) -> str:
+        The handler supports elicitation forwarding: when the backend server
+        calls ctx.elicit(), it's forwarded to the connected client through
+        the proxy's own context.
+        """
+
+        async def handler(kwargs: dict, ctx: Context) -> str:
             start_time = time.time()
             try:
                 # Find the server
@@ -115,26 +121,49 @@ class ProxyServer:
                 if not server:
                     raise ValueError(f"Server {server_name} not found")
 
-                # Call the tool on the backend server using the client service
+                # Create an elicitation handler that forwards to the proxy's context
+                async def elicitation_forwarder(
+                    message: str,
+                    response_type: type | None,
+                    params: Any,
+                    context: Any | None = None,
+                ) -> Any:
+                    """Forward elicitation requests from backend to client."""
+                    # Forward the elicitation to the connected client
+                    # The proxy's ctx.elicit() will send this to the client
+                    result = await ctx.elicit(
+                        message=message,
+                        response_type=response_type,
+                    )
+                    # Return the result to the backend
+                    if result.action == "accept":
+                        return result.data
+                    elif result.action == "decline":
+                        return ElicitResult(action="decline")
+                    else:
+                        return ElicitResult(action="cancel")
+
+                # Call the tool on the backend server with elicitation forwarding
                 result = await self.client_service.call_tool(
                     server=server,
                     tool_name=tool_name,
-                    tool_args=kwargs
+                    tool_args=kwargs,
+                    elicitation_handler=elicitation_forwarder,
                 )
 
                 duration_ms = (time.time() - start_time) * 1000
 
                 # Format the result for logging and return
                 # The result from MCP typically has content array
-                if hasattr(result, 'content'):
+                if hasattr(result, "content"):
                     # Extract text from content array
                     result_text = []
                     for item in result.content:
-                        if hasattr(item, 'text'):
+                        if hasattr(item, "text"):
                             result_text.append(item.text)
                         else:
                             result_text.append(str(item))
-                    formatted_result = '\n'.join(result_text)
+                    formatted_result = "\n".join(result_text)
                 else:
                     formatted_result = str(result)
 
@@ -167,7 +196,11 @@ class ProxyServer:
         return handler
 
     def _register_tool(self, server_name: str, tool: Any) -> None:
-        """Register a single tool with the FastMCP server."""
+        """Register a single tool with the FastMCP server.
+
+        The generated tool handler includes a Context parameter to support
+        elicitation forwarding from backend servers to clients.
+        """
         # Create prefixed name
         prefixed_name = f"{server_name}__{tool.name}"
         description = f"[{server_name}] {tool.description or tool.name}"
@@ -203,8 +236,9 @@ class ProxyServer:
         param_types.sort(key=lambda x: (not x[2], x[0]))
 
         # Create a dynamic function with proper signature
-        # Build the parameter string
-        param_str_parts = []
+        # Build the parameter string - include ctx: Context for elicitation support
+        # ctx must come FIRST since it has no default and other params may have defaults
+        param_str_parts = ["ctx: Context"]
         for param_name, python_type, is_required in param_types:
             type_name = python_type.__name__
             if is_required:
@@ -214,18 +248,21 @@ class ProxyServer:
 
         param_str = ", ".join(param_str_parts)
 
-        # Create the function body that calls our handler
+        # Create the function body that calls our handler with context
         func_code = f"""
 async def tool_handler({param_str}) -> str:
-    # Collect all parameters
+    # Collect all parameters (excluding ctx)
     kwargs = {{{", ".join(f'"{p[0]}": {p[0]}' for p in param_types)}}}
     # Remove None values
     kwargs = {{k: v for k, v in kwargs.items() if v is not None}}
-    return await _call_handler(kwargs)
+    return await _call_handler(kwargs, ctx)
 """
 
-        # Create a namespace with the handler
-        namespace = {"_call_handler": self._create_tool_handler(server_name, tool.name)}
+        # Create a namespace with the handler and Context type
+        namespace = {
+            "_call_handler": self._create_tool_handler(server_name, tool.name),
+            "Context": Context,
+        }
 
         # Execute the function definition
         exec(func_code, namespace)
@@ -299,10 +336,12 @@ async def tool_handler({param_str}) -> str:
         def _create_prompt_handler():
             async def handler(kwargs: dict) -> str:
                 return f"Prompt {prompt.name} from {server_name} with args: {kwargs}"
+
             return handler
 
         # If there are no parameters, create a simple handler
         if not param_types:
+
             async def prompt_handler() -> str:
                 return await _create_prompt_handler()({})
 
@@ -351,24 +390,30 @@ async def prompt_handler({param_str}) -> str:
         self.logger.set_log_file(log_file)
 
         # Count enabled servers
-        enabled_count = sum(1 for s in self.servers if self.config.is_server_enabled(s.source_file or "", s.name))
+        enabled_count = sum(
+            1 for s in self.servers if self.config.is_server_enabled(s.source_file or "", s.name)
+        )
 
         # Log server start
         if self.config.enable_logging:
+            msg = (
+                f"Proxy server starting on http://localhost:{self.config.port} "
+                f"with {enabled_count} enabled servers\n"
+                f"  HTTP endpoint: http://localhost:{self.config.port}/mcp\n"
+                f"  SSE endpoint:  http://localhost:{self.config.port}/sse"
+            )
             self.logger.log_server_started(
                 port=self.config.port,
                 enabled_servers=enabled_count,
-                message=f"Proxy server starting on http://localhost:{self.config.port} with {enabled_count} enabled servers\n"
-                f"  HTTP endpoint: http://localhost:{self.config.port}/mcp\n"
-                f"  SSE endpoint:  http://localhost:{self.config.port}/sse",
+                message=msg,
             )
 
         try:
             # Import required modules
+            import uvicorn
+            from fastmcp.server.http import create_sse_app
             from starlette.applications import Starlette
             from starlette.routing import Mount
-            from fastmcp.server.http import create_sse_app
-            import uvicorn
 
             # Create main Starlette app with both transports
             # Use http_app() for modern HTTP transport at /mcp
@@ -453,7 +498,7 @@ async def prompt_handler({param_str}) -> str:
         """
         return len(self._connected_clients)
 
-    def register_client(self, client_id: str, remote_addr: Optional[str] = None) -> None:
+    def register_client(self, client_id: str, remote_addr: str | None = None) -> None:
         """Register a new connected client.
 
         Args:
@@ -464,7 +509,7 @@ async def prompt_handler({param_str}) -> str:
         if self.config.enable_logging:
             self.logger.log_client_connected(client_id=client_id, remote_addr=remote_addr)
 
-    def unregister_client(self, client_id: str, reason: Optional[str] = None) -> None:
+    def unregister_client(self, client_id: str, reason: str | None = None) -> None:
         """Unregister a disconnected client.
 
         Args:

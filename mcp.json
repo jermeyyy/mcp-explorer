@@ -1,0 +1,29 @@
+{
+	"mcpServers": {
+		"kortex": {
+			"type": "stdio",
+			"command": "uv",
+			"args": [
+				"run",
+				"--directory",
+				"/Users/jermey/Projects/kortex",
+				"kortex-mcp",
+			]
+		},
+				"serena": {
+			"type": "stdio",
+			"command": "uv",
+			"args": [
+				"run",
+				"--directory",
+				"/Users/jermey/Projects/serena",
+				"serena",
+				"start-mcp-server",
+				"--context",
+				"ide-assistant",
+				"--project",
+				"/Users/jermey/Projects/mcp-gateway"
+			]
+		}
+	}
+}
