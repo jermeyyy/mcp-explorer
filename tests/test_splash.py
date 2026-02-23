@@ -1,4 +1,5 @@
 """Test splash screen display."""
+
 import asyncio
 from mcp_explorer.ui.screens import SplashScreen
 from textual.app import App
@@ -25,8 +26,8 @@ class TestApp(App):
 
         for i in range(4):
             await asyncio.sleep(1.0)
-            splash.update_status(f"Step {i+1}/4", (i+1) * 25)
-            print(f"Updated splash: Step {i+1}")
+            splash.update_status(f"Step {i + 1}/4", (i + 1) * 25)
+            print(f"Updated splash: Step {i + 1}")
 
         await asyncio.sleep(1.0)
         print("Exiting...")
@@ -36,4 +37,3 @@ class TestApp(App):
 if __name__ == "__main__":
     app = TestApp()
     app.run()
-

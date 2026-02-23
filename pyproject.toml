@@ -8,7 +8,7 @@ license = "LGPL-3.0-or-later"
 requires-python = ">=3.11"
 dependencies = [
     "textual>=0.47.0",
-    "fastmcp>=2.0.0",
+    "fastmcp>=3.0.1,<4",
     "pydantic>=2.0.0",
     "rich>=13.0.0",
     "pyjson5>=1.6.0",

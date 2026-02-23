@@ -10,24 +10,30 @@ def test_imports():
 
     try:
         from mcp_explorer.ui import MCPExplorerApp
+
         print("✅ MCPExplorerApp imported")
 
         from mcp_explorer.services import MCPDiscoveryService
+
         print("✅ MCPDiscoveryService imported")
 
         from mcp_explorer.models import MCPServer, ServerType
+
         print("✅ Models imported")
 
         from mcp_explorer.ui.screens import ServerListScreen
+
         print("✅ Screens imported")
 
         from mcp_explorer.ui.widgets import ServerListItem
+
         print("✅ Widgets imported")
 
         return True
     except Exception as e:
         print(f"❌ Import error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -38,6 +44,7 @@ def test_app_creation():
 
     try:
         from mcp_explorer.ui import MCPExplorerApp
+
         app = MCPExplorerApp()
         print("✅ App created successfully")
         print(f"   Title: {app.TITLE}")
@@ -45,6 +52,7 @@ def test_app_creation():
     except Exception as e:
         print(f"❌ App creation error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -77,6 +85,7 @@ def test_screen_creation():
     except Exception as e:
         print(f"❌ Screen creation error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

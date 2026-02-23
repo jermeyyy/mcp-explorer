@@ -1,4 +1,4 @@
-"""MCP Proxy Server implementation."""
+"""MCP Proxy Server implementation using FastMCP v3 create_proxy() and middleware."""
 
 import asyncio
 import time
@@ -6,14 +6,18 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastmcp import Context, FastMCP
-from fastmcp.client.elicitation import ElicitResult
+from fastmcp.server import create_proxy
+from fastmcp.server.middleware import Middleware, MiddlewareContext, PingMiddleware
+from fastmcp.server.middleware.error_handling import ErrorHandlingMiddleware
+from fastmcp.server.middleware.middleware import CallNext, PromptResult, ResourceResult, ToolResult
+from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
+from fastmcp.server.middleware.timing import TimingMiddleware
+from mcp import types as mt
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from ..models import MCPServer, ProxyConfig
-from ..services import MCPClientService
+from ..models import MCPServer, ProxyConfig, ServerType
 from .logger import ProxyLogger
 
 
@@ -47,8 +51,143 @@ class SSEClientTrackingMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
 
+class ProxyLogMiddleware(Middleware):
+    """Custom middleware that captures proxy operations for the TUI log viewer.
+
+    Logs tool calls, resource reads, and prompt gets with timing.
+    """
+
+    def __init__(self, proxy_logger: ProxyLogger, enable_logging: bool = True) -> None:
+        self.proxy_logger = proxy_logger
+        self.enable_logging = enable_logging
+
+    async def on_call_tool(
+        self,
+        context: MiddlewareContext[mt.CallToolRequestParams],
+        call_next: CallNext[mt.CallToolRequestParams, ToolResult],
+    ) -> ToolResult:
+        """Log tool calls with timing."""
+        tool_name = context.message.name
+        arguments = context.message.arguments or {}
+        # Extract server name from prefixed tool name (format: server_tool)
+        server_name, _, original_tool_name = tool_name.partition("_")
+        if not original_tool_name:
+            # No prefix found, use full name
+            server_name = "unknown"
+            original_tool_name = tool_name
+
+        start_time = time.time()
+        try:
+            result = await call_next(context)
+            duration_ms = (time.time() - start_time) * 1000
+
+            if self.enable_logging:
+                self.proxy_logger.log_tool_call(
+                    server_name=server_name,
+                    tool_name=original_tool_name,
+                    parameters=arguments,
+                    response=str(result),
+                    duration_ms=duration_ms,
+                )
+            return result
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+
+            if self.enable_logging:
+                self.proxy_logger.log_tool_call(
+                    server_name=server_name,
+                    tool_name=original_tool_name,
+                    parameters=arguments,
+                    error=str(e),
+                    duration_ms=duration_ms,
+                )
+            raise
+
+    async def on_read_resource(
+        self,
+        context: MiddlewareContext[mt.ReadResourceRequestParams],
+        call_next: CallNext[mt.ReadResourceRequestParams, ResourceResult],
+    ) -> ResourceResult:
+        """Log resource reads with timing."""
+        resource_uri = str(context.message.uri)
+        # Extract server name from prefixed URI (format: server://original_uri)
+        server_name = "unknown"
+        if "://" in resource_uri:
+            potential_server = resource_uri.split("://", 1)[0]
+            # Only treat as server prefix if it looks like a server name
+            # (not a standard scheme like http, https, file, etc.)
+            if potential_server not in ("http", "https", "file", "ftp"):
+                server_name = potential_server
+
+        start_time = time.time()
+        try:
+            result = await call_next(context)
+            duration_ms = (time.time() - start_time) * 1000
+
+            if self.enable_logging:
+                self.proxy_logger.log_resource_read(
+                    server_name=server_name,
+                    resource_uri=resource_uri,
+                    response=str(result),
+                    duration_ms=duration_ms,
+                )
+            return result
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+
+            if self.enable_logging:
+                self.proxy_logger.log_resource_read(
+                    server_name=server_name,
+                    resource_uri=resource_uri,
+                    error=str(e),
+                    duration_ms=duration_ms,
+                )
+            raise
+
+    async def on_get_prompt(
+        self,
+        context: MiddlewareContext[mt.GetPromptRequestParams],
+        call_next: CallNext[mt.GetPromptRequestParams, PromptResult],
+    ) -> PromptResult:
+        """Log prompt gets with timing."""
+        prompt_name = context.message.name
+        arguments = context.message.arguments or {}
+        # Extract server name from prefixed prompt name (format: server_prompt)
+        server_name, _, original_prompt_name = prompt_name.partition("_")
+        if not original_prompt_name:
+            server_name = "unknown"
+            original_prompt_name = prompt_name
+
+        start_time = time.time()
+        try:
+            result = await call_next(context)
+            duration_ms = (time.time() - start_time) * 1000
+
+            if self.enable_logging:
+                self.proxy_logger.log_prompt_get(
+                    server_name=server_name,
+                    prompt_name=original_prompt_name,
+                    parameters=dict(arguments),
+                    response=str(result),
+                    duration_ms=duration_ms,
+                )
+            return result
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+
+            if self.enable_logging:
+                self.proxy_logger.log_prompt_get(
+                    server_name=server_name,
+                    prompt_name=original_prompt_name,
+                    parameters=dict(arguments),
+                    error=str(e),
+                    duration_ms=duration_ms,
+                )
+            raise
+
+
 class ProxyServer:
-    """MCP Proxy Server that aggregates multiple MCP servers."""
+    """MCP Proxy Server that aggregates multiple MCP servers using FastMCP v3 create_proxy()."""
 
     def __init__(
         self,
@@ -66,318 +205,84 @@ class ProxyServer:
         self.servers = servers
         self.config = config
         self.logger = logger or ProxyLogger(max_entries=config.max_log_entries)
-        self.client_service = MCPClientService()
         self._running = False
         self._server_task: asyncio.Task | None = None
         self._uvicorn_server: Any | None = None
         self._connected_clients: set[str] = set()
 
-        # Initialize FastMCP server
-        self.mcp = FastMCP("mcp-explorer-proxy")
+        # Build MCP config from enabled servers only
+        mcp_config = self._build_mcp_config()
 
-        # Register dynamic handlers
-        self._setup_handlers()
+        # Create proxy using FastMCP v3 native create_proxy()
+        # This handles tool/resource/prompt forwarding, elicitation, etc. automatically
+        if mcp_config["mcpServers"]:
+            self.mcp = create_proxy(mcp_config, name="mcp-explorer-proxy")
+        else:
+            # No servers enabled — create a bare FastMCP instance
+            from fastmcp import FastMCP
 
-    def _setup_handlers(self) -> None:
-        """Set up MCP server request handlers."""
-        # Create a proxy tool for each enabled server's tools
+            self.mcp = FastMCP("mcp-explorer-proxy")
+
+        # Add middleware stack
+        # NOTE: Tool-level and resource-level filtering could be done with transforms later.
+        # Currently only server-level filtering is applied (at config construction time).
+        self.mcp.add_middleware(
+            ProxyLogMiddleware(
+                proxy_logger=self.logger,
+                enable_logging=config.enable_logging,
+            )
+        )
+        self.mcp.add_middleware(
+            ErrorHandlingMiddleware(include_traceback=False, transform_errors=True)
+        )
+        self.mcp.add_middleware(TimingMiddleware())
+        self.mcp.add_middleware(PingMiddleware(interval_ms=30000))
+        self.mcp.add_middleware(ResponseLimitingMiddleware(max_size=1_000_000))
+
+        if config.rate_limit:
+            from fastmcp.server.middleware.rate_limiting import RateLimitingMiddleware
+
+            self.mcp.add_middleware(
+                RateLimitingMiddleware(max_requests_per_second=config.rate_limit)
+            )
+
+    def _build_mcp_config(self) -> dict[str, Any]:
+        """Build an MCPConfig dict from enabled servers.
+
+        Only servers that pass ProxyConfig.is_server_enabled() are included.
+        """
+        mcp_servers: dict[str, Any] = {}
+
         for server in self.servers:
             config_file_path = server.source_file or ""
             if not self.config.is_server_enabled(config_file_path, server.name):
                 continue
 
-            for tool in server.tools:
-                if not self.config.is_tool_enabled(config_file_path, server.name, tool.name):
-                    continue
+            if server.server_type == ServerType.STDIO:
+                entry: dict[str, Any] = {"command": server.command, "args": server.args}
+                if server.env:
+                    entry["env"] = server.env
+                mcp_servers[server.name] = entry
 
-                # Create a closure to capture server_name and tool_name
-                self._register_tool(server.name, tool)
+            elif server.server_type == ServerType.HTTP:
+                entry = {
+                    "url": server.url,
+                    "transport": "streamable-http",
+                }
+                if server.headers:
+                    entry["headers"] = server.headers
+                mcp_servers[server.name] = entry
 
-            # Register resources
-            for resource in server.resources:
-                if not self.config.is_resource_enabled(config_file_path, server.name, resource.uri):
-                    continue
-                self._register_resource(server.name, resource)
+            elif server.server_type == ServerType.SSE:
+                entry = {
+                    "url": server.url,
+                    "transport": "sse",
+                }
+                if server.headers:
+                    entry["headers"] = server.headers
+                mcp_servers[server.name] = entry
 
-            # Register prompts
-            for prompt in server.prompts:
-                if not self.config.is_prompt_enabled(config_file_path, server.name, prompt.name):
-                    continue
-                self._register_prompt(server.name, prompt)
-
-    def _create_tool_handler(self, server_name: str, tool_name: str):
-        """Create a tool handler closure for a specific server and tool.
-
-        The handler supports elicitation forwarding: when the backend server
-        calls ctx.elicit(), it's forwarded to the connected client through
-        the proxy's own context.
-        """
-
-        async def handler(kwargs: dict, ctx: Context) -> str:
-            start_time = time.time()
-            try:
-                # Find the server
-                server = next((s for s in self.servers if s.name == server_name), None)
-                if not server:
-                    raise ValueError(f"Server {server_name} not found")
-
-                # Create an elicitation handler that forwards to the proxy's context
-                async def elicitation_forwarder(
-                    message: str,
-                    response_type: type | None,
-                    params: Any,
-                    context: Any | None = None,
-                ) -> Any:
-                    """Forward elicitation requests from backend to client."""
-                    # Forward the elicitation to the connected client
-                    # The proxy's ctx.elicit() will send this to the client
-                    result = await ctx.elicit(
-                        message=message,
-                        response_type=response_type,
-                    )
-                    # Return the result to the backend
-                    if result.action == "accept":
-                        return result.data
-                    elif result.action == "decline":
-                        return ElicitResult(action="decline")
-                    else:
-                        return ElicitResult(action="cancel")
-
-                # Call the tool on the backend server with elicitation forwarding
-                result = await self.client_service.call_tool(
-                    server=server,
-                    tool_name=tool_name,
-                    tool_args=kwargs,
-                    elicitation_handler=elicitation_forwarder,
-                )
-
-                duration_ms = (time.time() - start_time) * 1000
-
-                # Format the result for logging and return
-                # The result from MCP typically has content array
-                if hasattr(result, "content"):
-                    # Extract text from content array
-                    result_text = []
-                    for item in result.content:
-                        if hasattr(item, "text"):
-                            result_text.append(item.text)
-                        else:
-                            result_text.append(str(item))
-                    formatted_result = "\n".join(result_text)
-                else:
-                    formatted_result = str(result)
-
-                if self.config.enable_logging:
-                    self.logger.log_tool_call(
-                        server_name=server_name,
-                        tool_name=tool_name,
-                        parameters=kwargs,
-                        response=formatted_result,
-                        duration_ms=duration_ms,
-                    )
-
-                return formatted_result
-
-            except Exception as e:
-                duration_ms = (time.time() - start_time) * 1000
-                error_msg = str(e)
-
-                if self.config.enable_logging:
-                    self.logger.log_tool_call(
-                        server_name=server_name,
-                        tool_name=tool_name,
-                        parameters=kwargs,
-                        error=error_msg,
-                        duration_ms=duration_ms,
-                    )
-
-                return f"Error: {error_msg}"
-
-        return handler
-
-    def _register_tool(self, server_name: str, tool: Any) -> None:
-        """Register a single tool with the FastMCP server.
-
-        The generated tool handler includes a Context parameter to support
-        elicitation forwarding from backend servers to clients.
-        """
-        # Create prefixed name
-        prefixed_name = f"{server_name}__{tool.name}"
-        description = f"[{server_name}] {tool.description or tool.name}"
-
-        # Get the input schema
-        schema = tool.input_schema or {}
-        properties = schema.get("properties", {})
-        required = schema.get("required", [])
-
-        # Build parameter list for the dynamic function
-        param_types = []
-
-        for param_name, param_def in properties.items():
-            param_type = param_def.get("type", "string")
-
-            # Map JSON schema types to Python types
-            python_type = str  # default
-            if param_type == "integer":
-                python_type = int
-            elif param_type == "number":
-                python_type = float
-            elif param_type == "boolean":
-                python_type = bool
-            elif param_type == "array":
-                python_type = list
-            elif param_type == "object":
-                python_type = dict
-
-            is_required = param_name in required
-            param_types.append((param_name, python_type, is_required))
-
-        # Sort parameters: required first, then optional
-        param_types.sort(key=lambda x: (not x[2], x[0]))
-
-        # Create a dynamic function with proper signature
-        # Build the parameter string - include ctx: Context for elicitation support
-        # ctx must come FIRST since it has no default and other params may have defaults
-        param_str_parts = ["ctx: Context"]
-        for param_name, python_type, is_required in param_types:
-            type_name = python_type.__name__
-            if is_required:
-                param_str_parts.append(f"{param_name}: {type_name}")
-            else:
-                param_str_parts.append(f"{param_name}: {type_name} = None")
-
-        param_str = ", ".join(param_str_parts)
-
-        # Create the function body that calls our handler with context
-        func_code = f"""
-async def tool_handler({param_str}) -> str:
-    # Collect all parameters (excluding ctx)
-    kwargs = {{{", ".join(f'"{p[0]}": {p[0]}' for p in param_types)}}}
-    # Remove None values
-    kwargs = {{k: v for k, v in kwargs.items() if v is not None}}
-    return await _call_handler(kwargs, ctx)
-"""
-
-        # Create a namespace with the handler and Context type
-        namespace = {
-            "_call_handler": self._create_tool_handler(server_name, tool.name),
-            "Context": Context,
-        }
-
-        # Execute the function definition
-        exec(func_code, namespace)
-        tool_handler_func = namespace["tool_handler"]
-
-        # Register with FastMCP using the tool decorator
-        self.mcp.tool(name=prefixed_name, description=description)(tool_handler_func)
-
-    def _register_resource(self, server_name: str, resource: Any) -> None:
-        """Register a single resource with the FastMCP server."""
-        # Create prefixed URI
-        prefixed_uri = f"{server_name}://{resource.uri}"
-
-        async def resource_handler() -> str:
-            start_time = time.time()
-            try:
-                # Read the resource from the backend server
-                # Note: This is simplified - full implementation would use the client service
-                result = f"Read resource {resource.uri} from {server_name}"
-
-                duration_ms = (time.time() - start_time) * 1000
-
-                if self.config.enable_logging:
-                    self.logger.log_resource_read(
-                        server_name=server_name,
-                        resource_uri=resource.uri,
-                        response=result,
-                        duration_ms=duration_ms,
-                    )
-
-                return result
-
-            except Exception as e:
-                duration_ms = (time.time() - start_time) * 1000
-                error_msg = str(e)
-
-                if self.config.enable_logging:
-                    self.logger.log_resource_read(
-                        server_name=server_name,
-                        resource_uri=resource.uri,
-                        error=error_msg,
-                        duration_ms=duration_ms,
-                    )
-
-                return f"Error: {error_msg}"
-
-        # Register with FastMCP
-        description = f"[{server_name}] {resource.description or ''}"
-        self.mcp.resource(
-            uri=prefixed_uri,
-            name=resource.name or resource.uri,
-            description=description,
-            mime_type=resource.mime_type,
-        )(resource_handler)
-
-    def _register_prompt(self, server_name: str, prompt: Any) -> None:
-        """Register a single prompt with the FastMCP server."""
-        # Create prefixed name
-        prefixed_name = f"{server_name}__{prompt.name}"
-        description = f"[{server_name}] {prompt.description or prompt.name}"
-
-        # Build parameter list from prompt arguments
-        param_types = []
-        for arg in prompt.arguments:
-            param_types.append((arg.name, str, arg.required))
-
-        # Sort parameters: required first, then optional
-        param_types.sort(key=lambda x: (not x[2], x[0]))
-
-        # Create a closure to handle the prompt call
-        def _create_prompt_handler():
-            async def handler(kwargs: dict) -> str:
-                return f"Prompt {prompt.name} from {server_name} with args: {kwargs}"
-
-            return handler
-
-        # If there are no parameters, create a simple handler
-        if not param_types:
-
-            async def prompt_handler() -> str:
-                return await _create_prompt_handler()({})
-
-            self.mcp.prompt(name=prefixed_name, description=description)(prompt_handler)
-            return
-
-        # Build the parameter string for the dynamic function
-        param_str_parts = []
-        for param_name, python_type, is_required in param_types:
-            type_name = python_type.__name__
-            if is_required:
-                param_str_parts.append(f"{param_name}: {type_name}")
-            else:
-                param_str_parts.append(f"{param_name}: {type_name} = None")
-
-        param_str = ", ".join(param_str_parts)
-
-        # Create the function body
-        func_code = f"""
-async def prompt_handler({param_str}) -> str:
-    # Collect all parameters
-    kwargs = {{{", ".join(f'"{p[0]}": {p[0]}' for p in param_types)}}}
-    # Remove None values
-    kwargs = {{k: v for k, v in kwargs.items() if v is not None}}
-    return await _call_handler(kwargs)
-"""
-
-        # Create a namespace with the handler
-        namespace = {"_call_handler": _create_prompt_handler()}
-
-        # Execute the function definition
-        exec(func_code, namespace)
-        prompt_handler_func = namespace["prompt_handler"]
-
-        # Register with FastMCP
-        self.mcp.prompt(name=prefixed_name, description=description)(prompt_handler_func)
+        return {"mcpServers": mcp_servers}
 
     async def start(self) -> None:
         """Start the proxy server with both HTTP (/mcp) and SSE (/sse) endpoints."""
@@ -412,23 +317,18 @@ async def prompt_handler({param_str}) -> str:
             # Import required modules
             import uvicorn
             from fastmcp.server.http import create_sse_app
-            from starlette.applications import Starlette
             from starlette.routing import Mount
 
-            # Create main Starlette app with both transports
-            # Use http_app() for modern HTTP transport at /mcp
-            # Use create_sse_app() for legacy SSE support at /sse
-            app = Starlette(
-                routes=[
-                    Mount("/mcp", app=self.mcp.http_app()),
-                    Mount(
-                        "/sse",
-                        app=create_sse_app(server=self.mcp, message_path="/message", sse_path="/"),
-                    ),
-                ]
-            )
+            # Create SSE sub-app for legacy transport support
+            sse_app = create_sse_app(server=self.mcp, message_path="/message", sse_path="/")
 
-            # Add middleware to track SSE client connections
+            # Use http_app() with default /mcp path — its lifespan manages the session manager
+            app = self.mcp.http_app()
+
+            # Add SSE endpoint for legacy transport support
+            app.routes.append(Mount("/sse", app=sse_app))
+
+            # Track SSE client connections
             app.add_middleware(SSEClientTrackingMiddleware, proxy_server=self)
 
             # Run the combined app with uvicorn
@@ -519,3 +419,11 @@ async def prompt_handler({param_str}) -> str:
         self._connected_clients.discard(client_id)
         if self.config.enable_logging:
             self.logger.log_client_disconnected(client_id=client_id, reason=reason)
+
+    def enable_server(self, server_name: str) -> None:
+        """Enable a specific backend server by name."""
+        self.mcp.enable(names={server_name})
+
+    def disable_server(self, server_name: str) -> None:
+        """Disable a specific backend server by name."""
+        self.mcp.disable(names={server_name})

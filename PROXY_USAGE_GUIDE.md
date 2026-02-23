@@ -2,12 +2,19 @@
 
 ## 🚀 Overview
 
-MCP Explorer functions as a **fully-featured MCP Proxy Server** that aggregates multiple MCP servers into a single interface. You can:
+MCP Explorer functions as a **fully-featured MCP Proxy Server** that aggregates multiple MCP servers into a single interface. Powered by **FastMCP v3** and its native `create_proxy()` API, the proxy replaces hundreds of lines of manual handler registration with a concise, maintainable configuration-driven approach.
+
+You can:
 
 - ✅ **Aggregate** tools, resources, and prompts from multiple servers
 - ✅ **Configure Port** - Choose which port the proxy runs on
 - ✅ **Filter** which capabilities to expose (per-server granular control)
 - ✅ **Persist Settings** - Configuration saved to ~/.config/mcp-explorer/proxy-config.toml
+- ✅ **Middleware Stack** - Error handling, timing, ping keep-alive, response limiting, and custom logging
+- ✅ **Rate Limiting** - Optional configurable rate limiting per second
+- ✅ **Visibility Control** - Enable/disable backend servers at runtime without restarting the proxy
+- ✅ **Automatic MCP Feature Forwarding** - Elicitation, logging, and progress are forwarded transparently
+- ✅ **Dual Transport** - StreamableHTTP at `/mcp` (primary) and SSE at `/sse` (legacy)
 - ✅ **Log** all operations with detailed parameters and responses
 - ✅ **Search** through logs with topbar search and F3 navigation
 - ✅ **Expand** log entries to view full request/response data
@@ -15,7 +22,62 @@ MCP Explorer functions as a **fully-featured MCP Proxy Server** that aggregates 
 
 ## 📋 Key Features
 
-### 1. Proxy Configuration (Press 'P')
+### 1. FastMCP v3 `create_proxy()` Architecture
+
+The proxy is built on FastMCP v3's native `create_proxy()` function. Instead of manually registering handlers for every tool, resource, and prompt, the proxy:
+
+1. Builds an MCP config dict from enabled servers
+2. Calls `create_proxy(mcp_config, name="mcp-explorer-proxy")` to create a fully-wired proxy
+3. Adds a middleware stack for logging, error handling, timing, and more
+4. Mounts both HTTP and SSE transport endpoints
+
+This means **all MCP features are forwarded automatically** — including elicitation, logging, progress notifications, and any future MCP protocol additions — without any custom code.
+
+### 2. Middleware Stack
+
+The proxy applies the following middleware (in order):
+
+| Middleware | Description |
+|-----------|-------------|
+| **ProxyLogMiddleware** | Custom middleware that captures tool calls, resource reads, and prompt gets for the TUI log viewer with timing data |
+| **ErrorHandlingMiddleware** | Catches exceptions and returns clean error responses (tracebacks disabled in production) |
+| **TimingMiddleware** | Tracks execution time for all operations |
+| **PingMiddleware** | Sends periodic keep-alive pings (every 30s) to maintain connections |
+| **ResponseLimitingMiddleware** | Caps response size at 1 MB to prevent memory issues |
+| **RateLimitingMiddleware** | *(Optional)* Limits requests per second when `rate_limit` is configured |
+
+### 3. Dual Transport Endpoints
+
+The proxy serves two endpoints simultaneously:
+
+| Endpoint | Transport | Use Case |
+|----------|-----------|----------|
+| `/mcp` | **StreamableHTTP** (primary) | Modern MCP clients — full bidirectional streaming |
+| `/sse` | **SSE** (legacy) | Backward compatibility with older MCP clients |
+
+Both endpoints are served by the same FastMCP instance and share the middleware stack.
+
+### 4. Rate Limiting
+
+Set `rate_limit` in your proxy config to limit requests per second:
+
+```toml
+# ~/.config/mcp-explorer/proxy-config.toml
+rate_limit = 10.0  # Max 10 requests per second; omit or set to 0 for no limit
+```
+
+When configured, the `RateLimitingMiddleware` from FastMCP v3 is automatically added to the stack.
+
+### 5. Visibility Control (Enable/Disable Servers)
+
+Backend servers can be enabled or disabled at runtime without restarting the proxy:
+
+- **From the TUI**: Press 'P' to open Proxy Configuration, check/uncheck servers
+- **Programmatically**: `proxy_server.enable_server("server-name")` / `proxy_server.disable_server("server-name")`
+
+This uses FastMCP v3's native `enable()`/`disable()` API on the proxy instance.
+
+### 6. Proxy Configuration (Press 'P')
 Configure which servers and capabilities to expose through the proxy:
 
 - **Port Selection**: Choose proxy server port (default: 3000)
@@ -27,24 +89,15 @@ Configure which servers and capabilities to expose through the proxy:
 - **Start/Stop Proxy**: Toggle proxy server with visual feedback
 - **Save Configuration**: Persist settings to ~/.config/mcp-explorer/proxy-config.toml
 
-### 2. Log Viewer (Press 'L')
+### 7. Log Viewer (Press 'L')
 Advanced log viewer with clean, focused UI:
 
-- **Connected Clients Display**: Real-time count of active SSE connections shown prominently in stats bar
-- **Client Connection Events**: Automatic logging of client connect/disconnect events with timestamps and IP addresses
-- **Connected Clients Display**: Real-time count of active SSE connections shown prominently in stats bar
-- **Client Connection Events**: Automatic logging of client connect/disconnect events with timestamps and IP addresses
-- **Connected Clients Display**: Real-time count of active SSE connections shown prominently in stats bar
-- **Client Connection Events**: Automatic logging of client connect/disconnect events with timestamps and IP addresses
-- **Connected Clients Display**: Real-time count of active SSE connections shown prominently in stats bar
+- **Connected Clients Display**: Real-time count of active connections shown in stats bar
 - **Client Connection Events**: Automatic logging of client connect/disconnect events with timestamps and IP addresses
 - **Statistics**: See total calls, success rate, error count, and connected clients
 - **Collapsible Filters**: Right sidebar with filter options (Ctrl+F to toggle)
-- **Statistics**: See total calls, success rate, error count, and connected clients
 - **Expandable Entries**: Click to see full parameters and responses
-- **Statistics**: See total calls, success rate, error count, and connected clients
 - **Type Filters**: View all, tools only, resources only, prompts only, or errors only
-- **Statistics**: See total calls, success rate, error count, and connected clients
 - **Search Counter**: Shows current result position (e.g., "3/15")
 
 ## 🎯 How to Use
@@ -132,13 +185,13 @@ Expanded entries show:
 
 ### Special Entry Types
 
-- **Client Connected**: Logged when an SSE client connects (includes client ID and IP address)
-- **Client Disconnected**: Logged when an SSE client disconnects (includes reason)
+- **Client Connected**: Logged when a client connects (includes client ID and IP address)
+- **Client Disconnected**: Logged when a client disconnects (includes reason)
 
 ### Statistics Bar
 
 The stats bar at the top of the log viewer displays:
-- **Connected Clients**: Real-time count of active SSE connections
+- **Connected Clients**: Real-time count of active connections
 - **Total**: Total number of logged operations
 - **Success**: Number of successful operations
 - **Errors**: Number of failed operations
@@ -146,13 +199,14 @@ The stats bar at the top of the log viewer displays:
 
 ## 🌐 Connecting to the Proxy
 
-The proxy server uses **HTTP transport** (via FastMCP 2.0), making it accessible to any MCP client over the network.
+The proxy server exposes **dual transport endpoints** powered by FastMCP v3.
 
 ### Connection Details
 
-- **Protocol**: HTTP (Streamable HTTP transport)
-- **Endpoint**: `http://localhost:{port}` (default: `http://localhost:3000`)
-- **Transport Type**: `http` or `sse` (Server-Sent Events for backward compatibility)
+| Endpoint | URL | Transport | Recommended |
+|----------|-----|-----------|-------------|
+| **Primary** | `http://localhost:{port}/mcp` | StreamableHTTP | ✅ Yes |
+| **Legacy** | `http://localhost:{port}/sse` | Server-Sent Events | For older clients |
 
 ### Example Configurations
 
@@ -161,7 +215,7 @@ The proxy server uses **HTTP transport** (via FastMCP 2.0), making it accessible
 {
   "mcpServers": {
     "mcp-explorer-proxy": {
-      "url": "http://localhost:3000"
+      "url": "http://localhost:3000/mcp"
     }
   }
 }
@@ -174,7 +228,21 @@ The proxy server uses **HTTP transport** (via FastMCP 2.0), making it accessible
     "servers": {
       "mcp-explorer-proxy": {
         "type": "http",
-        "url": "http://localhost:3000"
+        "url": "http://localhost:3000/mcp"
+      }
+    }
+  }
+}
+```
+
+**Legacy SSE Clients**:
+```json
+{
+  "mcp": {
+    "servers": {
+      "mcp-explorer-proxy": {
+        "type": "sse",
+        "url": "http://localhost:3000/sse"
       }
     }
   }
@@ -182,10 +250,33 @@ The proxy server uses **HTTP transport** (via FastMCP 2.0), making it accessible
 ```
 
 **Other MCP Clients**:
-- Simply configure the client to connect to `http://localhost:{port}`
+- Connect to `http://localhost:{port}/mcp` for StreamableHTTP (recommended)
+- Connect to `http://localhost:{port}/sse` for legacy SSE compatibility
 - The proxy will automatically expose all enabled servers and their capabilities
 
 ## 🔧 Proxy Architecture
+
+### FastMCP v3 `create_proxy()` Flow
+
+```
+Enabled Servers ──► _build_mcp_config() ──► create_proxy(config)
+                                                    │
+                                                    ▼
+                                             FastMCP Instance
+                                                    │
+                                    ┌───────────────┼───────────────┐
+                                    ▼               ▼               ▼
+                              ProxyLog MW    ErrorHandling MW   Timing MW
+                                    │               │               │
+                                    ▼               ▼               ▼
+                               Ping MW      ResponseLimiting   RateLimiting
+                                                                (optional)
+                                                    │
+                                    ┌───────────────┴───────────────┐
+                                    ▼                               ▼
+                              /mcp endpoint                   /sse endpoint
+                           (StreamableHTTP)                  (Legacy SSE)
+```
 
 ### Name Prefixing
 
@@ -211,7 +302,7 @@ To avoid conflicts between servers with similar capabilities:
 - Logs stored in: `~/.mcp-explorer/proxy-logs/`
 - Format: JSON Lines (one entry per line)
 - In-memory cache: Last 1000 entries (configurable)
-- Automatic log rotation when max size reached
+- Logged by the `ProxyLogMiddleware` in the middleware stack
 
 ## 📁 File Locations
 
@@ -220,58 +311,33 @@ To avoid conflicts between servers with similar capabilities:
 └── proxy-config.toml     # Saved proxy configuration
 
 ~/.mcp-explorer/
-├── proxy-logs/           # Log files (if enabled)
-- 🔌 **Client Connected**: New SSE client connection
-1. **Monitor Connected Clients**: Watch the "Connected Clients" counter in the stats bar to see active SSE connections in real-time
+└── proxy-logs/           # Log files (if enabled)
+    └── proxy-{timestamp}.jsonl
+```
 
-2. **Hide Filters**: Press Ctrl+F to hide the filter sidebar and maximize log viewing space
-│   └── proxy-{timestamp}.jsonl
-3. **Filter Before Searching**: Use type filters to narrow results before searching
-    └── mcp_servers.log
-4. **Clear Old Logs**: Click "Clear Logs" button in filter sidebar to remove all entries and free memory
-
-5. **Expand to Copy**: Expand entries to see full JSON - useful for debugging
-
-6. **Monitor in Real-time**: Keep log viewer open while testing to see operations
-- 🟢 **Green** (SUCCESS): Operation completed successfully
-7. **Error Investigation**: Use "Errors Only" filter to quickly find problems
-- 🟣 **Purple** (PENDING): Operation in progress
-8. **Search Operators**: Search works on operation names, parameters, and responses
-### Log Entry Types
-9. **Quick Navigation**: Use topbar search for fast access, results counter shows position
-- 📄 **Resource Read**: Resource retrieval
-10. **Port Configuration**: Change proxy port if default (3000) conflicts with other services
-
-11. **Persistent Config**: All settings automatically load on next startup after saving
-
-12. **Track Client Activity**: View connection/disconnection events to debug client connectivity issues
+## 💡 Tips
 
 1. **Hide Filters**: Press Ctrl+F to hide the filter sidebar and maximize log viewing space
-
 2. **Filter Before Searching**: Use type filters to narrow results before searching
-
-- ✅ SSE client connection tracking
-- ✅ Real-time connected clients display
-- ✅ Automatic connection/disconnection event logging
-- ✅ HTTP transport (network-accessible proxy server)
 3. **Clear Old Logs**: Click "Clear Logs" button in filter sidebar to remove all entries and free memory
-
 4. **Expand to Copy**: Expand entries to see full JSON - useful for debugging
-
 5. **Monitor in Real-time**: Keep log viewer open while testing to see operations
-
 6. **Error Investigation**: Use "Errors Only" filter to quickly find problems
-
 7. **Search Operators**: Search works on operation names, parameters, and responses
-
 8. **Quick Navigation**: Use topbar search for fast access, results counter shows position
-
 9. **Port Configuration**: Change proxy port if default (3000) conflicts with other services
-
 10. **Persistent Config**: All settings automatically load on next startup after saving
+11. **Track Client Activity**: View connection/disconnection events to debug client connectivity issues
+12. **Use Rate Limiting**: Set `rate_limit` in config to protect backend servers from overload
 
 ## ✅ Implemented Features
 
+- ✅ FastMCP v3 `create_proxy()` architecture
+- ✅ Middleware stack (error handling, timing, ping, response limiting, logging)
+- ✅ Optional rate limiting via `RateLimitingMiddleware`
+- ✅ Runtime server enable/disable (visibility control)
+- ✅ Automatic MCP feature forwarding (elicitation, logging, progress)
+- ✅ Dual transport: StreamableHTTP (`/mcp`) + SSE (`/sse`)
 - ✅ Configuration persistence (save/load from TOML file)
 - ✅ Port configuration
 - ✅ Topbar search with navigation
@@ -279,7 +345,7 @@ To avoid conflicts between servers with similar capabilities:
 - ✅ Dynamic proxy status in app header
 - ✅ Checkbox-based capability selection
 - ✅ Auto-save and auto-load settings
-- ✅ HTTP transport (network-accessible proxy server)
+- ✅ SSE client connection tracking
 
 ## 🔜 Planned Features
 
@@ -311,3 +377,6 @@ To avoid conflicts between servers with similar capabilities:
 - Too many log entries - click "Clear Logs"
 - Close expanded entries to improve performance
 - Restart application if needed
+
+### Rate limiting errors
+- If clients receive 429 errors, increase the `rate_limit` value or remove it to disable limiting

@@ -8,8 +8,9 @@ A powerful TUI (Text User Interface) application for discovering, exploring, and
 
 ### Server Discovery & Exploration
 
-- **Automatic Discovery**: Finds all configured MCP servers from Claude Code and GitHub Copilot IntelliJ
-- **Server Type Support**: Handles stdio, HTTP streaming, and SSE server types
+- **Automatic Discovery**: Finds all configured MCP servers from Claude Code, GitHub Copilot IntelliJ, and other local configs
+- **FastMCP Discovery**: Discovers servers from Claude Desktop, Cursor, Goose, and other supported clients via FastMCP v3
+- **Server Type Support**: Handles stdio, HTTP streaming (StreamableHTTP), and SSE server types
 - **JSON5 Support**: Parses both strict JSON and JSON5 (unquoted keys, comments, trailing commas)
 - **Config Validation**: Validates configuration files with helpful error messages
 - **Server Overview**: Lists all servers with their status, type, and capabilities at a glance
@@ -19,8 +20,14 @@ A powerful TUI (Text User Interface) application for discovering, exploring, and
   - Explore prompt templates with arguments
   - Preview prompt outputs in real-time
 
-### MCP Proxy Server
+### MCP Proxy Server (FastMCP v3)
 
+- **FastMCP v3 Proxy**: Built on `create_proxy()` for automatic tool/resource/prompt forwarding
+- **Middleware Stack**: Error handling, timing, ping keep-alive, response limiting, and custom logging
+- **Dual Transport**: StreamableHTTP at `/mcp` (primary) and SSE at `/sse` (legacy)
+- **Rate Limiting**: Optional configurable rate limiting via proxy config
+- **Visibility Control**: Enable/disable backend servers at runtime without restart
+- **MCP Feature Forwarding**: Elicitation, logging, and progress forwarded automatically
 - **Server Aggregation**: Combine multiple MCP servers into a single proxy endpoint
 - **Port Configuration**: Choose which port the proxy runs on (default: 3000)
 - **Granular Filtering**: Select which tools, resources, and prompts to expose per server
@@ -115,7 +122,7 @@ Configuration format:
       "headers": {
         "Authorization": "Bearer YOUR_TOKEN"
       },
-      "description": "HTTP streaming MCP server (FastMCP 2.0)"
+      "description": "HTTP streaming MCP server (FastMCP v3)"
     },
     "my-sse-server": {
       "type": "sse",
@@ -128,7 +135,7 @@ Configuration format:
 
 **Supported Server Types:**
 - `stdio`: Launches a local process and communicates via stdin/stdout (default)
-- `http`: Connects to a network MCP server via HTTP streaming (FastMCP 2.0 - recommended for production)
+- `http`: Connects to a network MCP server via StreamableHTTP (FastMCP v3 - recommended for production)
 - `sse`: Connects to a running server via Server-Sent Events (legacy, backward compatibility)
 
 ## Architecture
@@ -162,12 +169,22 @@ Type checking:
 mypy mcp_explorer
 ```
 
-Linting:
+## Changelog
 
-### v0.3.0 - HTTP Streaming Support (Latest)
+### v0.4.0 - FastMCP v3 Upgrade (Latest)
 
-✅ **HTTP Streaming Servers**: Full support for HTTP streaming MCP servers using FastMCP 2.0
-✅ **StreamableHTTP Transport**: Uses the recommended `streamablehttp_client` for production deployments
+✅ **FastMCP v3 `create_proxy()`**: Replaced 300+ lines of manual proxy code with native `create_proxy()` (~10 lines config)
+✅ **Middleware Stack**: ErrorHandling, Timing, Ping, ResponseLimiting, and custom ProxyLog middleware
+✅ **StreamableHTTP Default**: Tool terminal now uses StreamableHttpTransport at `/mcp` instead of SSE at `/sse`
+✅ **FastMCP Discovery**: New server discovery source scanning Claude Desktop, Cursor, Goose, and more
+✅ **Visibility Control**: Runtime enable/disable of servers without proxy restart
+✅ **Rate Limiting**: Optional configurable rate limiting via ProxyConfig
+✅ **MCP Feature Forwarding**: Elicitation, logging, and progress forwarded automatically
+
+### v0.3.0 - HTTP Streaming Support
+
+✅ **HTTP Streaming Servers**: Full support for HTTP streaming MCP servers
+✅ **StreamableHTTP Transport**: Uses `streamablehttp_client` for production deployments
 ✅ **Authentication Headers**: Support for custom headers including Bearer tokens and API keys
 ✅ **Network Accessibility**: Connect to remote MCP servers over HTTP
 ✅ **Bidirectional Streaming**: Efficient real-time communication with HTTP servers
@@ -175,9 +192,8 @@ Linting:
 
 ### v0.2.0 - SSE Client Tracking
 
-✅ **SSE Client Tracking**: Log viewer now displays real-time count of connected SSE clients
+✅ **SSE Client Tracking**: Log viewer displays real-time count of connected clients
 ✅ **Connection Event Logging**: Track individual client connections and disconnections with timestamps
-- **docs/HTTP_STREAMING_SUPPORT.md** - HTTP streaming server configuration and usage guide
 ✅ **Automatic Middleware**: Starlette middleware automatically tracks all SSE connections
 ✅ **Client Statistics**: View connected client count prominently in the stats bar
 
@@ -192,5 +208,6 @@ Linting:
 ## Documentation
 
 - **QUICKSTART.md** - Quick start guide with examples
-- **PROXY_USAGE_GUIDE.md** - Complete guide to using the MCP Proxy feature
+- **PROXY_USAGE_GUIDE.md** - Complete guide to using the MCP Proxy feature (FastMCP v3)
+- **docs/HTTP_STREAMING_SUPPORT.md** - HTTP streaming server configuration and usage guide
 - **docs/CONFIG_FORMATS.md** - Configuration format reference

@@ -4,7 +4,10 @@
 import asyncio
 import sys
 
+import pytest
 
+
+@pytest.mark.asyncio
 async def test_discovery():
     """Test server discovery with error handling."""
     print("🧪 Testing async server discovery...\n")
@@ -46,6 +49,7 @@ async def test_discovery():
     except Exception as e:
         print(f"\n❌ Test failed with error: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 
@@ -60,5 +64,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n\n❌ Fatal error: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)

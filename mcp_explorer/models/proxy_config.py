@@ -2,7 +2,7 @@
 
 import tomllib
 from pathlib import Path
-from typing import Any, Dict, Set
+from typing import Any
 
 import tomli_w
 from pydantic import BaseModel, Field
@@ -15,20 +15,25 @@ class ProxyConfig(BaseModel):
     port: int = 3000
 
     # Server filtering - using composite key: "config_file_path:server_name"
-    enabled_servers: Set[str] = Field(default_factory=set)  # Server keys to expose
+    enabled_servers: set[str] = Field(default_factory=set)  # Server keys to expose
 
     # Tool filtering per server - using composite key: "config_file_path:server_name"
-    enabled_tools: Dict[str, Set[str]] = Field(default_factory=dict)  # server_key -> tool names
+    enabled_tools: dict[str, set[str]] = Field(default_factory=dict)  # server_key -> tool names
 
     # Resource filtering per server - using composite key: "config_file_path:server_name"
-    enabled_resources: Dict[str, Set[str]] = Field(default_factory=dict)  # server_key -> resource URIs
+    enabled_resources: dict[str, set[str]] = Field(
+        default_factory=dict
+    )  # server_key -> resource URIs
 
     # Prompt filtering per server - using composite key: "config_file_path:server_name"
-    enabled_prompts: Dict[str, Set[str]] = Field(default_factory=dict)  # server_key -> prompt names
+    enabled_prompts: dict[str, set[str]] = Field(default_factory=dict)  # server_key -> prompt names
 
     # Logging
     enable_logging: bool = True
     max_log_entries: int = 1000
+
+    # Rate limiting
+    rate_limit: float | None = None  # Max requests per second, None = no limit
 
     @staticmethod
     def make_server_key(config_file_path: str, server_name: str) -> str:
@@ -66,7 +71,9 @@ class ProxyConfig(BaseModel):
             return False  # No tools enabled by default for this server
         return tool_name in self.enabled_tools[server_key]
 
-    def is_resource_enabled(self, config_file_path: str, server_name: str, resource_uri: str) -> bool:
+    def is_resource_enabled(
+        self, config_file_path: str, server_name: str, resource_uri: str
+    ) -> bool:
         """Check if a resource is enabled.
 
         Args:
@@ -159,6 +166,9 @@ class ProxyConfig(BaseModel):
             if "enabled_prompts" in data:
                 data["enabled_prompts"] = {k: set(v) for k, v in data["enabled_prompts"].items()}
 
+            if "rate_limit" in data and data["rate_limit"] is None:
+                del data["rate_limit"]
+
             return cls(**data)
         except Exception as e:
             print(f"Error loading proxy config: {e}")
@@ -169,7 +179,7 @@ class ProxyConfig(BaseModel):
         config_path = self.get_config_path()
 
         # Convert sets to lists for TOML serialization
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "enabled": self.enabled,
             "port": self.port,
             "enabled_servers": list(self.enabled_servers),
@@ -179,6 +189,9 @@ class ProxyConfig(BaseModel):
             "enable_logging": self.enable_logging,
             "max_log_entries": self.max_log_entries,
         }
+
+        if self.rate_limit is not None:
+            data["rate_limit"] = self.rate_limit
 
         try:
             with open(config_path, "wb") as f:

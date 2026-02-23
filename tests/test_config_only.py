@@ -73,20 +73,20 @@ def main():
             # Show key fields
             if server_type == "stdio":
                 print(f"      Command: {config.get('command', 'N/A')}")
-                if config.get('args'):
-                    args = config['args']
-                    args_str = ' '.join(args[:3])
+                if config.get("args"):
+                    args = config["args"]
+                    args_str = " ".join(args[:3])
                     if len(args) > 3:
-                        args_str += f' ... (+{len(args) - 3} more)'
+                        args_str += f" ... (+{len(args) - 3} more)"
                     print(f"      Args: {args_str}")
             elif server_type == "sse":
                 print(f"      URL: {config.get('url', 'N/A')}")
 
-            if config.get('description'):
+            if config.get("description"):
                 print(f"      Description: {config['description']}")
 
-            if config.get('env'):
-                env_keys = list(config['env'].keys())
+            if config.get("env"):
+                env_keys = list(config["env"].keys())
                 print(f"      Env vars: {', '.join(env_keys)}")
 
     # Test 5: Schema detection
@@ -110,15 +110,15 @@ def main():
         print(f"   Schema: {schema_type}")
 
         # Check for JSON5 features
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             content = f.read()
 
         features = []
-        if '//' in content or '/*' in content:
+        if "//" in content or "/*" in content:
             features.append("comments")
-        if content.count('"') < content.count(':'):
+        if content.count('"') < content.count(":"):
             features.append("unquoted keys")
-        if ',\n  }' in content or ',\n}' in content:
+        if ",\n  }" in content or ",\n}" in content:
             features.append("trailing commas")
 
         if features:
@@ -130,11 +130,10 @@ def main():
     print("\n\n6️⃣  Summary Statistics")
     print("-" * 70)
 
-    stdio_count = sum(1 for c in all_servers.values() if c.get('type', 'stdio') == 'stdio')
-    sse_count = sum(1 for c in all_servers.values() if c.get('type') == 'sse')
+    stdio_count = sum(1 for c in all_servers.values() if c.get("type", "stdio") == "stdio")
+    sse_count = sum(1 for c in all_servers.values() if c.get("type") == "sse")
     valid_count = sum(
-        1 for name, c in all_servers.items()
-        if loader.validate_server_config(name, c)[0]
+        1 for name, c in all_servers.items() if loader.validate_server_config(name, c)[0]
     )
     invalid_count = len(all_servers) - valid_count
 

@@ -17,7 +17,11 @@ def main() -> None:
         print("❌ No configuration files found.")
         print("\nSearched locations:")
         for path in [
-            Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json",
+            Path.home()
+            / "Library"
+            / "Application Support"
+            / "Claude"
+            / "claude_desktop_config.json",
             Path.home() / ".config" / "github-copilot" / "intellij" / "mcp.json",
             Path.home() / ".config" / "mcp" / "config.json",
             Path.home() / ".mcp" / "config.json",

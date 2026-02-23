@@ -2,10 +2,13 @@
 """Test script to verify MCP server discovery from both Claude and GitHub Copilot configs."""
 
 import asyncio
-from pathlib import Path
+
+import pytest
+
 from mcp_explorer.services.discovery import MCPDiscoveryService
 
 
+@pytest.mark.asyncio
 async def test_discovery():
     """Test server discovery."""
     print("🔍 Testing MCP Server Discovery\n")
@@ -32,18 +35,20 @@ async def test_discovery():
 
         if server_type == "stdio":
             print(f"    Command: {config.get('command', 'N/A')}")
-            if config.get('args'):
-                print(f"    Args: {' '.join(config['args'][:3])}{'...' if len(config['args']) > 3 else ''}")
+            if config.get("args"):
+                args_str = " ".join(config["args"][:3])
+                suffix = "..." if len(config["args"]) > 3 else ""
+                print(f"    Args: {args_str}{suffix}")
         else:
             print(f"    URL: {config.get('url', 'N/A')}")
 
-        if config.get('description'):
+        if config.get("description"):
             print(f"    Description: {config['description']}")
 
-        if config.get('_source_file'):
+        if config.get("_source_file"):
             print(f"    Source: {config['_source_file']}")
 
-        if config.get('_validation_error'):
+        if config.get("_validation_error"):
             print(f"    ⚠ Validation Error: {config['_validation_error']}")
 
     # Discover servers (this will attempt to connect)

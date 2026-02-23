@@ -1,10 +1,14 @@
 """Test proxy server restart functionality."""
 
 import asyncio
-from mcp_explorer.models import ProxyConfig, MCPServer
-from mcp_explorer.proxy import ProxyServer, ProxyLogger
+
+import pytest
+
+from mcp_explorer.models import MCPServer, ProxyConfig
+from mcp_explorer.proxy import ProxyLogger, ProxyServer
 
 
+@pytest.mark.asyncio
 async def test_restart():
     """Test that proxy can be stopped and restarted multiple times."""
     # Create minimal config
@@ -69,4 +73,3 @@ async def test_restart():
 
 if __name__ == "__main__":
     asyncio.run(test_restart())
-

@@ -1,4 +1,5 @@
 """Test splash screen animation in isolation."""
+
 import asyncio
 from mcp_explorer.ui.screens import SplashScreen
 from textual.app import App
@@ -20,4 +21,3 @@ if __name__ == "__main__":
     print("Starting animation test - watch for color wave in logo...")
     print("App will auto-close after 5 seconds")
     app.run()
-

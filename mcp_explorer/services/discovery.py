@@ -1,11 +1,24 @@
 """Discovery service for finding and loading MCP servers."""
 
 import asyncio
-from typing import Any, Dict, List
+from typing import Any
 
-from ..models import MCPServer, ServerType, ConfigFile
+from ..models import ConfigFile, MCPServer, ServerType
 from .client import MCPClientService
 from .config_loader import MCPConfigLoader
+
+try:
+    from fastmcp.cli.discovery import (
+        DiscoveredServer,
+    )
+    from fastmcp.cli.discovery import (
+        discover_servers as fastmcp_discover_servers,
+    )
+    from fastmcp.mcp_config import RemoteMCPServer, StdioMCPServer
+
+    HAS_FASTMCP_DISCOVERY = True
+except ImportError:
+    HAS_FASTMCP_DISCOVERY = False
 
 
 class MCPDiscoveryService:
@@ -16,7 +29,7 @@ class MCPDiscoveryService:
         self.config_loader = MCPConfigLoader()
         self.client_service = MCPClientService()
 
-    async def discover_all_servers_hierarchical(self) -> List[ConfigFile]:
+    async def discover_all_servers_hierarchical(self) -> list[ConfigFile]:
         """Discover and initialize all configured MCP servers maintaining hierarchy.
 
         Returns:
@@ -28,7 +41,7 @@ class MCPDiscoveryService:
             return []
 
         # Process each config file
-        initialized_config_files: List[ConfigFile] = []
+        initialized_config_files: list[ConfigFile] = []
 
         for config_file_data in config_files_data:
             path = config_file_data["path"]
@@ -49,15 +62,12 @@ class MCPDiscoveryService:
                 initialized_servers = [s for s in servers if isinstance(s, MCPServer)]
 
                 if initialized_servers:
-                    initialized_config_file = ConfigFile(
-                        path=path,
-                        servers=initialized_servers
-                    )
+                    initialized_config_file = ConfigFile(path=path, servers=initialized_servers)
                     initialized_config_files.append(initialized_config_file)
 
         return initialized_config_files
 
-    async def discover_all_servers(self) -> List[MCPServer]:
+    async def discover_all_servers(self) -> list[MCPServer]:
         """Discover and initialize all configured MCP servers (flattened list).
 
         Returns:
@@ -66,13 +76,70 @@ class MCPDiscoveryService:
         config_files = await self.discover_all_servers_hierarchical()
 
         # Flatten the hierarchy into a single list
-        all_servers: List[MCPServer] = []
+        all_servers: list[MCPServer] = []
         for config_file in config_files:
             all_servers.extend(config_file.servers)
 
+        # Add FastMCP-discovered servers (de-duplicate by name)
+        existing_names = {s.name for s in all_servers}
+        for server in self._discover_fastmcp_servers():
+            if server.name not in existing_names:
+                all_servers.append(server)
+                existing_names.add(server.name)
+
         return all_servers
 
-    async def _init_server(self, name: str, config: Dict[str, Any]) -> MCPServer:
+    def _discover_fastmcp_servers(self) -> list[MCPServer]:
+        """Discover MCP servers using FastMCP's built-in discovery.
+
+        Scans Claude Desktop, Cursor, Goose, and other supported clients.
+        """
+        if not HAS_FASTMCP_DISCOVERY:
+            return []
+
+        try:
+            discovered = fastmcp_discover_servers()
+        except Exception:
+            return []
+
+        servers: list[MCPServer] = []
+        for entry in discovered:
+            try:
+                server = self._convert_discovered_server(entry)
+                if server:
+                    servers.append(server)
+            except Exception:
+                continue
+        return servers
+
+    def _convert_discovered_server(self, entry: "DiscoveredServer") -> MCPServer | None:
+        """Convert a FastMCP DiscoveredServer to our MCPServer model."""
+        config = entry.config
+        if isinstance(config, StdioMCPServer):
+            return MCPServer(
+                name=entry.name,
+                server_type=ServerType.STDIO,
+                command=config.command,
+                args=config.args,
+                env={k: str(v) for k, v in config.env.items()} if config.env else {},
+                source_file=str(entry.config_path),
+            )
+        elif isinstance(config, RemoteMCPServer):
+            transport = config.transport
+            if transport == "sse":
+                server_type = ServerType.SSE
+            else:
+                server_type = ServerType.HTTP
+            return MCPServer(
+                name=entry.name,
+                server_type=server_type,
+                url=str(config.url),
+                headers=config.headers or {},
+                source_file=str(entry.config_path),
+            )
+        return None
+
+    async def _init_server(self, name: str, config: dict[str, Any]) -> MCPServer:
         """Initialize a single server from its configuration."""
         try:
             # Determine server type

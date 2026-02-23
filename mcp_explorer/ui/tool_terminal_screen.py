@@ -9,7 +9,7 @@ from typing import Any
 
 from fastmcp import Client
 from fastmcp.client.elicitation import ElicitResult
-from fastmcp.client.transports import SSETransport
+from fastmcp.client.transports import StreamableHttpTransport
 from mcp.types import LoggingMessageNotificationParams
 from textual import on
 from textual.app import ComposeResult
@@ -920,11 +920,11 @@ class ToolTerminalScreen(Screen[None]):
 
         try:
             # Use prefixed tool name for proxy
-            prefixed_tool_name = f"{self.selected_server.name}__{self.selected_tool.name}"
+            prefixed_tool_name = f"{self.selected_server.name}_{self.selected_tool.name}"
 
             # Connect to the proxy server (which supports elicitation forwarding)
-            proxy_url = f"http://localhost:{self.proxy_config.port}/sse"
-            transport = SSETransport(url=proxy_url)
+            proxy_url = f"http://localhost:{self.proxy_config.port}/mcp"
+            transport = StreamableHttpTransport(url=proxy_url)
 
             # Create client with elicitation handler support
             client = Client(
